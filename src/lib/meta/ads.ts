@@ -1,0 +1,195 @@
+import "server-only";
+import { sql, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import { ads, adInsightsDaily, campaigns, socialPosts } from "@/db/schema";
+import { META } from "@/lib/config";
+import { detectRegion, listRegions } from "@/lib/regions";
+import { graph, graphAll } from "./client";
+
+type Action = { action_type: string; value: string };
+
+/** Lead count from an insights `actions` array. Prefers the combined "lead" action. */
+export function leadsFromActions(actions?: Action[]): number {
+  if (!actions) return 0;
+  const pick = (t: string) => actions.find((a) => a.action_type === t);
+  const a = pick("lead") ?? pick("onsite_conversion.lead_grouped") ?? pick("leadgen_grouped");
+  return a ? Number(a.value) || 0 : 0;
+}
+
+const accountCurrency = new Map<string, string>();
+async function currencyOf(accountId: string) {
+  if (!accountCurrency.has(accountId)) {
+    const r = await graph<{ currency?: string }>(`act_${accountId}`, { fields: "currency" });
+    accountCurrency.set(accountId, r.currency ?? "AED");
+  }
+  return accountCurrency.get(accountId)!;
+}
+
+/** Campaigns and ads (with creative) for every ISTO ad account. */
+export async function syncAdStructure() {
+  const allRegions = await listRegions();
+  let adCount = 0;
+
+  for (const accountId of META.adAccountIds) {
+    const camps = await graphAll<{ id: string; name: string; objective?: string; effective_status?: string }>(
+      `act_${accountId}/campaigns`,
+      { fields: "id,name,objective,effective_status", limit: 200 },
+    );
+    for (const c of camps) {
+      const values = {
+        id: c.id,
+        accountId,
+        name: c.name,
+        objective: c.objective ?? null,
+        status: c.effective_status ?? null,
+        regionCode: detectRegion(allRegions, c.name),
+        updatedAt: new Date(),
+      };
+      await db.insert(campaigns).values(values).onConflictDoUpdate({ target: campaigns.id, set: values });
+    }
+
+    type ApiAd = {
+      id: string;
+      name: string;
+      effective_status?: string;
+      campaign_id?: string;
+      adset?: { id: string; name: string };
+      created_time?: string;
+      preview_shareable_link?: string;
+      creative?: {
+        id: string;
+        thumbnail_url?: string;
+        image_url?: string;
+        video_id?: string;
+        body?: string;
+        title?: string;
+        object_type?: string;
+        effective_instagram_media_id?: string;
+        effective_object_story_id?: string;
+        instagram_permalink_url?: string;
+      };
+    };
+    const list = await graphAll<ApiAd>(`act_${accountId}/ads`, {
+      fields:
+        "id,name,effective_status,campaign_id,adset{id,name},created_time,preview_shareable_link," +
+        "creative.thumbnail_width(720).thumbnail_height(720){id,thumbnail_url,image_url,video_id,body,title,object_type," +
+        "effective_instagram_media_id,effective_object_story_id,instagram_permalink_url}",
+      limit: 100,
+    });
+
+    for (const a of list) {
+      const cr = a.creative;
+      const values = {
+        id: a.id,
+        accountId,
+        campaignId: a.campaign_id ?? null,
+        adsetId: a.adset?.id ?? null,
+        adsetName: a.adset?.name ?? null,
+        name: a.name,
+        status: a.effective_status ?? null,
+        createdTime: a.created_time ? new Date(a.created_time) : null,
+        creativeId: cr?.id ?? null,
+        thumbnailUrl: cr?.thumbnail_url ?? null,
+        imageUrl: cr?.image_url ?? null,
+        videoId: cr?.video_id ?? null,
+        body: cr?.body ?? null,
+        title: cr?.title ?? null,
+        objectType: cr?.object_type ?? null,
+        instagramMediaId: cr?.effective_instagram_media_id ?? null,
+        pagePostId: cr?.effective_object_story_id ?? null,
+        permalink:
+          cr?.instagram_permalink_url ??
+          (cr?.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null),
+        previewLink: a.preview_shareable_link ?? null,
+        updatedAt: new Date(),
+      };
+      await db.insert(ads).values(values).onConflictDoUpdate({ target: ads.id, set: values });
+      adCount++;
+    }
+  }
+
+  // Mark organic posts that were promoted with an ad.
+  const promoted = await db
+    .select({ ig: ads.instagramMediaId, fb: ads.pagePostId })
+    .from(ads);
+  const ids = [...new Set(promoted.flatMap((p) => [p.ig, p.fb]).filter((x): x is string => !!x))];
+  if (ids.length) await db.update(socialPosts).set({ boosted: true }).where(inArray(socialPosts.id, ids));
+
+  return { ads: adCount };
+}
+
+/** Daily ad-level metrics for a date range (inclusive, YYYY-MM-DD). */
+export async function syncInsights(since: string, until: string) {
+  let rows = 0;
+  for (const accountId of META.adAccountIds) {
+    const currency = await currencyOf(accountId);
+    type Row = {
+      date_start: string;
+      ad_id: string;
+      adset_id?: string;
+      campaign_id?: string;
+      spend?: string;
+      impressions?: string;
+      reach?: string;
+      clicks?: string;
+      inline_link_clicks?: string;
+      actions?: Action[];
+    };
+    const data = await graphAll<Row>(`act_${accountId}/insights`, {
+      level: "ad",
+      time_increment: 1,
+      time_range: JSON.stringify({ since, until }),
+      fields: "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,clicks,inline_link_clicks,actions",
+      limit: 500,
+    });
+    for (const r of data) {
+      const values = {
+        date: r.date_start,
+        adId: r.ad_id,
+        accountId,
+        campaignId: r.campaign_id ?? null,
+        adsetId: r.adset_id ?? null,
+        currency,
+        spend: r.spend ?? "0",
+        impressions: Number(r.impressions ?? 0),
+        reach: Number(r.reach ?? 0),
+        clicks: Number(r.clicks ?? 0),
+        linkClicks: Number(r.inline_link_clicks ?? 0),
+        leads: leadsFromActions(r.actions),
+        updatedAt: new Date(),
+      };
+      await db
+        .insert(adInsightsDaily)
+        .values(values)
+        .onConflictDoUpdate({ target: [adInsightsDaily.date, adInsightsDaily.adId], set: values });
+      rows++;
+    }
+  }
+  return { rows };
+}
+
+/**
+ * Deduplicated reach for a period. Daily reach can't be summed (the same person counts
+ * every day), so this asks Meta for the period total. Cached by the caller.
+ */
+export async function periodReach(since: string, until: string, campaignIds?: string[]): Promise<number> {
+  let total = 0;
+  for (const accountId of META.adAccountIds) {
+    const params: Record<string, string> = {
+      level: "account",
+      time_range: JSON.stringify({ since, until }),
+      fields: "reach",
+    };
+    if (campaignIds?.length) {
+      params.filtering = JSON.stringify([{ field: "campaign.id", operator: "IN", value: campaignIds }]);
+    }
+    const r = await graph<{ data: { reach?: string }[] }>(`act_${accountId}/insights`, params);
+    total += Number(r.data[0]?.reach ?? 0); // accounts don't share audiences in a meaningful way
+  }
+  return total;
+}
+
+export async function lastInsightDate(): Promise<string | null> {
+  const [r] = await db.select({ d: sql<string>`max(${adInsightsDaily.date})` }).from(adInsightsDaily);
+  return r?.d ?? null;
+}
