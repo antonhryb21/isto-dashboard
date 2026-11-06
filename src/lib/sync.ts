@@ -93,3 +93,8 @@ export async function lastSync(kind?: SyncKind) {
   const [r] = kind ? await db.select().from(syncRuns).where(eq(syncRuns.kind, kind)).orderBy(desc(syncRuns.startedAt)).limit(1) : await q;
   return r ?? null;
 }
+
+/** True when the last quick sync is missing or older than `minutes`. */
+export function isStale(run: { startedAt: Date } | null, minutes = 10) {
+  return !run || Date.now() - run.startedAt.getTime() > minutes * 60_000;
+}

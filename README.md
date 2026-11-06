@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ISTO · Marketing dashboard
 
-## Getting Started
+Реклама Meta, пости Instagram і Facebook та міні-CRM лідів ISTO в одному місці.
 
-First, run the development server:
+- **Огляд** — витрати, ліди без спаму, ціна ліда і якісного ліда, зустрічі, угоди, порівняння з попереднім періодом.
+- **Реклама** — кампанії з результатами в CRM (скільки лідів стали якісними і дійшли до угоди).
+- **Креативи** — кожне оголошення з візуалом і ціною якісного ліда.
+- **Соцмережі** — пости IG і FB з охопленням, збереженнями, репостами; позначка, які пости бустились.
+- **Воронка** — від показу реклами до угоди.
+- **CRM** — список і дошка лідів з усіх регіональних таблиць; статус, відповідальний, сума угоди, коментарі з історією. Зміна статусу або відповідального одразу записується в Google Таблицю.
+- **Адмін** — люди з доступом і ролями, регіони, таблиці з лідами, ручний запуск синхронізації.
+
+Стек: Next.js 16, Postgres (Neon) + Drizzle, Vercel.
+
+## Як оновлюються дані
+
+| Що | Коли |
+| --- | --- |
+| Нові ліди з форм Meta | Миттєво, через вебхук `/api/webhooks/meta` |
+| Реклама (3 дні), ліди з таблиць, свіжі пости IG | Коли хтось відкриває дашборд і даним більше 10 хв (у фоні), або кнопкою «Оновити зараз» |
+| Кампанії, креативи, 30 днів реклами, пости IG і FB зі статистикою | Щодня о 03:00 UTC (Vercel Cron) |
+| Історія за 12 місяців | Один раз вручну: Адмін → «Завантажити історію» |
+
+Працює і на плані Hobby (там дозволено лише щоденний cron), але для робочого використання Vercel вимагає Pro.
+
+## Розгортання на Vercel
+
+1. Імпортуйте репозиторій у Vercel.
+2. Storage → Neon Postgres → підключіть до проєкту (`DATABASE_URL` додасться сама). Міграції бази виконуються автоматично під час кожної збірки.
+3. Додайте змінні оточення (Settings → Environment Variables):
+
+| Змінна | Опис |
+| --- | --- |
+| `DATABASE_URL` | Додає Neon |
+| `APP_URL` | `https://dash.ваш-домен` |
+| `ADMIN_EMAILS` | Email-и, які при першому вході стають адмінами (через кому) |
+| `AUTH_SECRET` | Випадковий рядок ≥ 32 символи |
+| `CRON_SECRET` | Випадковий рядок; Vercel передає його в щоденний cron |
+| `META_APP_ID`, `META_APP_SECRET` | Застосунок Meta «ISTO Dashboard» |
+| `META_SYSTEM_USER_TOKEN` | Безстроковий токен системного користувача |
+| `META_WEBHOOK_VERIFY_TOKEN` | Випадковий рядок для перевірки вебхука |
+| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | JSON-ключ сервісного акаунта Google у base64 |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth-клієнт для входу; redirect URI `https://<домен>/api/auth/callback/google` |
+
+Необов'язкові: `META_API_VERSION` (за замовчуванням `v25.0`), `META_AD_ACCOUNT_IDS`, `META_PAGE_ID`, `META_IG_USER_ID` — якщо зміняться кабінети чи сторінка.
+
+4. Redeploy → увійдіть через Google акаунтом з `ADMIN_EMAILS`.
+5. Адмін → «Повне оновлення», потім «Завантажити історію за 12 міс.».
+6. У Meta: App → Webhooks → Page → поле `leadgen`, Callback URL `https://<домен>/api/webhooks/meta`, Verify token = `META_WEBHOOK_VERIFY_TOKEN`. Потім Адмін → «Підписати сторінку на ліди».
+
+## Таблиці з лідами
+
+Кожна вкладка таблиці — джерело лідів. Колонки розпізнаються за назвами (`id`, `created_time`, `campaign_name`, `phone`, `email`, `lead_status`, `New Bizz`/`owner`, `Comments`…); решта колонок — відповіді з форми. Вкладки-зведення (`All_Leads_System`, `Helper`, `Dashboard` тощо) пропускаються. Нову таблицю (новий регіон) додають в Адмін; спершу відкрийте її для сервісного акаунта Google з правом редагування.
+
+Статуси CRM: New → Contacted → Follow-up → Meeting → Proposal sent → Won / Lost, плюс No answer, Not relevant, Supplier, Spam. Старі значення з таблиць (CREATED, Новый, Spam / Supplier) зводяться до них автоматично. Якщо статус змінено в таблиці або ботом, CRM підхопить його при наступній синхронізації; щойно змінений у CRM статус (до 2 хв) таблицею не перезаписується.
+
+## Локальна розробка
 
 ```bash
+npm install
+cp .env.example .env.local   # заповніть
+npm run db:migrate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Після зміни `src/db/schema.ts`: `npm run db:generate` і закомітьте нову міграцію з `drizzle/`.
