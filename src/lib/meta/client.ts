@@ -64,8 +64,12 @@ export async function graphAll<T>(path: string, params: Record<string, string | 
 }
 
 /** POST, used to subscribe the Page to the leadgen webhook. */
-export async function graphPost<T = unknown>(path: string, params: Record<string, string>): Promise<T> {
-  const t = token();
+export async function graphPost<T = unknown>(
+  path: string,
+  params: Record<string, string>,
+  accessToken?: string,
+): Promise<T> {
+  const t = accessToken ?? token();
   const body = new URLSearchParams({ ...params, access_token: t });
   const proof = appSecretProof(t);
   if (proof) body.set("appsecret_proof", proof);
