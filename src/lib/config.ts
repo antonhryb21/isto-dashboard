@@ -3,7 +3,7 @@
  * Override any of these with env vars without touching code.
  */
 export const META = {
-  apiVersion: process.env.META_API_VERSION ?? "v25.0",
+  apiVersion: process.env.META_API_VERSION ?? "v27.0",
   adAccountIds: (process.env.META_AD_ACCOUNT_IDS ?? "338101002044297,1710957566057565")
     .split(",")
     .map((s) => s.trim())

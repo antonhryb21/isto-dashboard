@@ -43,7 +43,7 @@
 | `LEADS_API_TOKEN` | Випадковий рядок; ним Telegram-бот (n8n) підписує запити зі статусами |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth-клієнт для входу; redirect URI `https://<домен>/api/auth/callback/google` |
 
-Необов'язкові: `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` — лише якщо треба живу двосторонню синхронізацію з Google Таблицями (за замовчуванням вимкнена); `META_API_VERSION` (за замовчуванням `v25.0`), `META_AD_ACCOUNT_IDS`, `META_PAGE_ID`, `META_IG_USER_ID` — якщо зміняться кабінети чи сторінка.
+Необов'язкові: `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` — лише якщо треба живу двосторонню синхронізацію з Google Таблицями (за замовчуванням вимкнена); `META_API_VERSION` (за замовчуванням `v27.0`), `META_AD_ACCOUNT_IDS`, `META_PAGE_ID`, `META_IG_USER_ID` — якщо зміняться кабінети чи сторінка.
 
 4. Redeploy → увійдіть через Google акаунтом з `ADMIN_EMAILS`.
 5. Адмін → «Повне оновлення», потім «Завантажити історію за 12 міс.».
