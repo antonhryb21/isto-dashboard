@@ -24,35 +24,36 @@ const SYSTEM = `Ти — досвідчений performance-маркетолог
 - Згадуй конкурентів лише там, де це дає корисну ідею (частота постів, формати, залученість).
 - 4–8 інсайтів, від найважливішого. Пиши українською, коротко, без води.`;
 
-const TOOL = {
-  name: "report_insights",
-  description: "Повернути підсумок і список інсайтів для маркетингової команди.",
-  input_schema: {
-    type: "object",
-    properties: {
-      health: { type: "integer", minimum: 0, maximum: 100, description: "Загальна оцінка стану маркетингу 0–100" },
-      summary: { type: "string", description: "2–4 речення: головне за період і що робити в першу чергу" },
-      insights: {
-        type: "array",
-        minItems: 1,
-        maxItems: 8,
-        items: {
-          type: "object",
-          properties: {
-            severity: { type: "string", enum: ["critical", "warning", "info", "good"] },
-            category: { type: "string", enum: ["budget", "performance", "creative", "funnel", "crm", "plan", "social", "competitors", "data"] },
-            title: { type: "string", description: "Один рядок: що відбувається" },
-            evidence: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 4 },
-            action: { type: "string", description: "Що конкретно зробити" },
-            expectedEffect: { type: "string" },
-            confidence: { type: "string", enum: ["high", "medium", "low"] },
-          },
-          required: ["severity", "category", "title", "evidence", "action", "confidence"],
+/**
+ * Answer format. Sent as structured output (`output_config.format`): Sonnet 5.5 no longer accepts a forced
+ * tool call. Structured outputs don't take min/max limits, so those are stated in the descriptions instead.
+ */
+const SCHEMA = {
+  type: "object",
+  properties: {
+    health: { type: "integer", description: "Загальна оцінка стану маркетингу від 0 до 100" },
+    summary: { type: "string", description: "2–4 речення: головне за період і що робити в першу чергу" },
+    insights: {
+      type: "array",
+      description: "Від 4 до 8 інсайтів, від найважливішого",
+      items: {
+        type: "object",
+        properties: {
+          severity: { type: "string", enum: ["critical", "warning", "info", "good"] },
+          category: { type: "string", enum: ["budget", "performance", "creative", "funnel", "crm", "plan", "social", "competitors", "data"] },
+          title: { type: "string", description: "Один рядок: що відбувається" },
+          evidence: { type: "array", items: { type: "string" }, description: "1–4 конкретні цифри з даних" },
+          action: { type: "string", description: "Що конкретно зробити" },
+          expectedEffect: { type: "string", description: "Очікуваний ефект; порожній рядок, якщо невідомо" },
+          confidence: { type: "string", enum: ["high", "medium", "low"] },
         },
+        required: ["severity", "category", "title", "evidence", "action", "expectedEffect", "confidence"],
+        additionalProperties: false,
       },
     },
-    required: ["health", "summary", "insights"],
   },
+  required: ["health", "summary", "insights"],
+  additionalProperties: false,
 } as const;
 
 type ToolOutput = { health: number; summary: string; insights: AiInsight[] };
@@ -67,21 +68,38 @@ async function callClaude(snapshot: unknown) {
     },
     body: JSON.stringify({
       model: AI_MODEL,
-      max_tokens: 4000,
+      max_tokens: 6000,
       system: SYSTEM,
-      tools: [TOOL],
-      tool_choice: { type: "tool", name: TOOL.name },
+      output_config: { format: { type: "json_schema", schema: SCHEMA } },
       messages: [{ role: "user", content: `Дані дашборду ISTO:\n\n${JSON.stringify(snapshot)}` }],
     }),
   });
   const body = (await res.json().catch(() => ({}))) as {
-    content?: { type: string; name?: string; input?: ToolOutput }[];
+    content?: { type: string; text?: string }[];
+    stop_reason?: string;
     usage?: { input_tokens?: number; output_tokens?: number };
     error?: { message?: string };
   };
   if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${body.error?.message ?? "помилка"}`);
-  const out = body.content?.find((c) => c.type === "tool_use" && c.name === TOOL.name)?.input;
-  if (!out?.insights) throw new Error("Модель не повернула інсайти");
+  if (body.stop_reason === "max_tokens") throw new Error("Відповідь моделі обрізалась (max_tokens) — спробуйте ще раз");
+  const text = body.content?.find((c) => c.type === "text")?.text;
+  if (!text) throw new Error("Модель не повернула відповідь");
+  let out: ToolOutput;
+  try {
+    out = JSON.parse(text) as ToolOutput;
+  } catch {
+    throw new Error("Модель повернула не JSON");
+  }
+  if (!Array.isArray(out.insights)) throw new Error("Модель не повернула інсайти");
+  // Enum capitalisation isn't guaranteed: normalise.
+  out.insights = out.insights.slice(0, 8).map((i) => ({
+    ...i,
+    severity: String(i.severity).toLowerCase() as AiInsight["severity"],
+    category: String(i.category).toLowerCase(),
+    confidence: String(i.confidence).toLowerCase() as AiInsight["confidence"],
+    evidence: (i.evidence ?? []).slice(0, 4),
+    expectedEffect: i.expectedEffect || undefined,
+  }));
   return { out, usage: body.usage ?? {} };
 }
 
