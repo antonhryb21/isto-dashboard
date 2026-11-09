@@ -149,7 +149,7 @@ export default async function AdminPage() {
       <section className="card p-5">
         <div className="label">Звіти й тривоги в Telegram</div>
         <p className="mt-1 text-[12px] text-faint">
-          Щоранку о 07:00 за Дубаєм бот надсилає: витрати, ліди і CPL за вчора, прогрес плану місяця і тривоги — CPL вище середнього на 50%+,
+          Щоранку о 09:30 за Києвом бот надсилає: витрати, ліди і CPL за вчора, прогрес плану місяця і тривоги — CPL вище середнього на 50%+,
           кампанії, що 3 дні витрачають без лідів, ліди, які чекають контакту довше {process.env.LEAD_SLA_MINUTES ?? 30} хв, збої оновлення даних.
           Потрібні змінні TELEGRAM_BOT_TOKEN (токен бота від @BotFather) і TELEGRAM_CHAT_ID (ID групи) у Vercel.
         </p>

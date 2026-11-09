@@ -26,7 +26,7 @@ export default async function InsightsPage({ searchParams }: { searchParams: SP 
     <div className="flex max-w-5xl flex-col gap-6">
       <SectionTitle
         title="AI-інсайти"
-        sub="Щоранку Claude аналізує цифри дашборду за 30 днів і пише, що відбувається і що з цим робити."
+        sub="Щоранку о 09:30 (Київ) Claude аналізує цифри дашборду за 30 днів і пише, що відбувається і що з цим робити."
         right={hasRole(user.role, "marketing") ? <GenerateInsightsButton disabled={!enabled} /> : null}
       />
 
@@ -38,7 +38,7 @@ export default async function InsightsPage({ searchParams }: { searchParams: SP 
       {!enabled && (
         <Empty>
           Щоб увімкнути, додайте у Vercel змінну ANTHROPIC_API_KEY (ключ з console.anthropic.com) і зробіть Redeploy. Після цього аналіз
-          запускатиметься щоранку о 07:00 за Дубаєм.
+          запускатиметься щоранку о 09:30 за Києвом.
         </Empty>
       )}
 
