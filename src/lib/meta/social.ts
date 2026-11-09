@@ -81,6 +81,8 @@ export async function syncInstagram(insightDays = 30) {
       set: { followers: account.followers_count ?? null, mediaCount: account.media_count ?? null },
     });
 
+  await syncIgNewFollowers(ig);
+
   const media = await graphAll<IgMedia>(`${ig}/media`, {
     fields: "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
     limit: 100,
@@ -250,4 +252,31 @@ function definedOnly(m: Metrics) {
 export async function postsByIds(ids: string[]) {
   if (!ids.length) return [];
   return db.select().from(socialPosts).where(inArray(socialPosts.id, ids));
+}
+
+/**
+ * New Instagram followers per day. Meta only gives the last 30 days of this metric,
+ * so history builds up from the day the dashboard starts syncing.
+ */
+async function syncIgNewFollowers(ig: string) {
+  const now = Math.floor(Date.now() / 1000);
+  type Ins = { data: { name: string; values: { value: number; end_time: string }[] }[] };
+  let r: Ins;
+  try {
+    r = await graph<Ins>(`${ig}/insights`, { metric: "follower_count", period: "day", since: now - 29 * 86400, until: now });
+  } catch (e) {
+    console.warn("[instagram] follower_count unavailable:", e instanceof Error ? e.message : e);
+    return;
+  }
+  for (const v of r.data[0]?.values ?? []) {
+    // end_time marks the end of the day being reported.
+    const date = new Date(Date.parse(v.end_time) - 86_400_000).toISOString().slice(0, 10);
+    await db
+      .insert(accountSnapshots)
+      .values({ platform: "ig", accountId: ig, date, newFollowers: v.value })
+      .onConflictDoUpdate({
+        target: [accountSnapshots.platform, accountSnapshots.accountId, accountSnapshots.date],
+        set: { newFollowers: v.value },
+      });
+  }
 }

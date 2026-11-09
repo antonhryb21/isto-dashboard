@@ -16,6 +16,25 @@ export function leadsFromActions(actions?: Action[]): number {
   return a ? Number(a.value) || 0 : 0;
 }
 
+const actionValue = (actions: Action[] | undefined, ...types: string[]) => {
+  for (const t of types) {
+    const a = actions?.find((x) => x.action_type === t);
+    if (a) return Number(a.value) || 0;
+  }
+  return 0;
+};
+
+/** Ad engagement counters as Ads Manager shows them. */
+export function engagementFromActions(actions?: Action[]) {
+  return {
+    pageEngagement: actionValue(actions, "page_engagement"),
+    postReactions: actionValue(actions, "post_reaction"),
+    postComments: actionValue(actions, "comment"),
+    postSaves: actionValue(actions, "onsite_conversion.post_save"),
+    postShares: actionValue(actions, "post"),
+  };
+}
+
 const accountCurrency = new Map<string, string>();
 async function currencyOf(accountId: string) {
   if (!accountCurrency.has(accountId)) {
@@ -156,6 +175,7 @@ export async function syncInsights(since: string, until: string) {
         clicks: Number(r.clicks ?? 0),
         linkClicks: Number(r.inline_link_clicks ?? 0),
         leads: leadsFromActions(r.actions),
+        ...engagementFromActions(r.actions),
         updatedAt: new Date(),
       };
       await db

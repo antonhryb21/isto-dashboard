@@ -166,6 +166,12 @@ export const adInsightsDaily = pgTable(
     clicks: integer("clicks").notNull().default(0),
     linkClicks: integer("link_clicks").notNull().default(0),
     leads: integer("leads").notNull().default(0),
+    // Engagement with the ad itself (from the insights `actions` array).
+    pageEngagement: integer("page_engagement").notNull().default(0),
+    postReactions: integer("post_reactions").notNull().default(0),
+    postComments: integer("post_comments").notNull().default(0),
+    postSaves: integer("post_saves").notNull().default(0),
+    postShares: integer("post_shares").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.date, t.adId] }), index("ins_campaign_idx").on(t.campaignId, t.date)],
@@ -219,6 +225,7 @@ export const accountSnapshots = pgTable(
     date: date("date").notNull(),
     followers: integer("followers"),
     mediaCount: integer("media_count"),
+    newFollowers: integer("new_followers"), // gained that day (Instagram insights `follower_count`)
   },
   (t) => [primaryKey({ columns: [t.platform, t.accountId, t.date] })],
 );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Users } from "lucide-react";
+import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Table2, Users } from "lucide-react";
 import { IstoLogo } from "@/components/logo";
 
 const NAV = [
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/social", label: "Соцмережі", icon: Images },
   { href: "/funnel", label: "Воронка", icon: Filter },
   { href: "/crm", label: "CRM · ліди", icon: Users },
+  { href: "/reports", label: "Звіти", icon: Table2 },
 ];
 
 /** Keeps the period/region filters when moving between sections. */

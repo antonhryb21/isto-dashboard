@@ -196,3 +196,29 @@ table.data tbody tr:hover {
   color: var(--accent-ink);
   border-color: var(--accent);
 }
+
+/* Reports: metrics as rows, periods as columns; section bands as in the team's spreadsheet reports. */
+table.report td,
+table.report th {
+  border-right: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
+}
+table.report .sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--panel);
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.report tr.band-social td {
+  background: color-mix(in oklab, var(--steel) 22%, var(--panel));
+}
+table.report tr.band-followers td {
+  background: color-mix(in oklab, var(--good) 14%, var(--panel));
+}
+table.report td.total,
+table.report th.total {
+  font-weight: 600;
+  background: color-mix(in oklab, var(--oak) 22%, var(--panel));
+}
