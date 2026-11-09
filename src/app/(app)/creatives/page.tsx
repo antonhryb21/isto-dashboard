@@ -61,12 +61,12 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
                   <div className="aspect-[4/5]" />
                 )}
                 {c.isVideo && (
-                  <span className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5">
+                  <span className="absolute right-2 top-2 rounded-full bg-overlay p-1.5">
                     <Play size={12} fill="white" />
                   </span>
                 )}
                 {c.status && c.status !== "ACTIVE" && (
-                  <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/80">
+                  <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">
                     {c.status.toLowerCase()}
                   </span>
                 )}

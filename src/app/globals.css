@@ -1,17 +1,49 @@
 @import "tailwindcss";
 
-/* ISTO: quiet, architectural. Warm graphite surfaces, one sand accent. */
-:root {
-  --bg: #0e0e0d;
-  --panel: #161614;
-  --panel-2: #1d1d1a;
-  --line: #2a2926;
-  --text: #ecebe6;
-  --muted: #9a978e;
-  --faint: #6b6962;
-  --accent: #c9a979;
-  --good: #6fbf8b;
-  --bad: #e07a6a;
+/*
+ * ISTO brand (Logobook 2026).
+ * Palette: Porcelain Veil #F0F0F0 · Pale Oak #CEC7B4 · Khaki Beige #A39D8D · Stone Brown #60584D
+ *          Cool Steel #A5AAB0 · Charcoal Blue #393E49 · Onyx #161616
+ * Type:    TT Commons Pro (main, tracking −3%) · Erode Light Italic (secondary)
+ * Light is the primary theme (the brand prefers the logo on white); dark uses Onyx.
+ */
+:root,
+:root[data-theme="light"] {
+  --bg: #f0f0f0; /* Porcelain Veil */
+  --panel: #ffffff;
+  --panel-2: #f6f5f2;
+  --line: #e3dfd6;
+  --text: #161616; /* Onyx */
+  --muted: #60584d; /* Stone Brown */
+  --faint: #8a8476;
+  --accent: #393e49; /* Charcoal Blue */
+  --accent-ink: #f0f0f0;
+  --sand: #a39d8d; /* Khaki Beige */
+  --oak: #cec7b4; /* Pale Oak */
+  --steel: #a5aab0; /* Cool Steel */
+  --good: #4f7a5e;
+  --bad: #a4513f;
+  --overlay: rgba(22, 22, 22, 0.62);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #161616; /* Onyx */
+  --panel: #1d1e21;
+  --panel-2: #25272c;
+  --line: #33363d;
+  --text: #f0f0f0; /* Porcelain Veil */
+  --muted: #a5aab0; /* Cool Steel */
+  --faint: #7d8189;
+  --accent: #cec7b4; /* Pale Oak */
+  --accent-ink: #161616;
+  --sand: #a39d8d;
+  --oak: #cec7b4;
+  --steel: #a5aab0;
+  --good: #82b394;
+  --bad: #d98a73;
+  --overlay: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -23,9 +55,15 @@
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-sand: var(--sand);
+  --color-oak: var(--oak);
   --color-good: var(--good);
   --color-bad: var(--bad);
-  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-overlay: var(--overlay);
+  /* TT Commons Pro is used when installed (brand computers); Figtree is the closest free web match. */
+  --font-sans: "TT Commons Pro", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Erode", "Iowan Old Style", Georgia, serif;
 }
 
 html,
@@ -37,23 +75,45 @@ body {
 body {
   font-family: var(--font-sans);
   font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Brand headline pairing: TT Commons Pro Medium + Erode Light Italic, tight tracking. */
+.display {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.display em,
+.serif {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 300;
+  letter-spacing: -0.02em;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--accent) 35%, transparent);
+  background: color-mix(in oklab, var(--sand) 45%, transparent);
 }
 
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 6px;
 }
 
 .label {
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.metric {
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
 
 table.data {
@@ -66,7 +126,7 @@ table.data th {
   font-weight: 500;
   color: var(--muted);
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
@@ -74,7 +134,7 @@ table.data th {
 }
 table.data td {
   padding: 10px 12px;
-  border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
   vertical-align: middle;
 }
 table.data td.num,
@@ -87,9 +147,9 @@ table.data tbody tr:hover {
 }
 
 .input {
-  background: var(--panel-2);
+  background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 7px 10px;
   font-size: 13px;
   color: var(--text);
@@ -103,11 +163,11 @@ table.data tbody tr:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 7px 12px;
   font-size: 13px;
   border: 1px solid var(--line);
-  background: var(--panel-2);
+  background: var(--panel);
   color: var(--text);
   cursor: pointer;
 }
@@ -117,21 +177,22 @@ table.data tbody tr:hover {
 .btn-accent {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1a1712;
-  font-weight: 600;
+  color: var(--accent-ink);
+  font-weight: 500;
 }
 .btn-accent:hover {
-  filter: brightness(1.06);
+  filter: brightness(1.12);
 }
 .chip {
   border-radius: 999px;
-  padding: 5px 11px;
+  padding: 5px 12px;
   font-size: 12.5px;
   border: 1px solid var(--line);
+  background: var(--panel);
   color: var(--muted);
 }
 .chip[data-active="true"] {
-  background: var(--text);
-  color: var(--bg);
-  border-color: var(--text);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }

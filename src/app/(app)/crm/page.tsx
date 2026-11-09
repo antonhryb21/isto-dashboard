@@ -45,7 +45,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
     <div className="flex flex-col gap-6">
       <SectionTitle
         title="CRM · ліди"
-        sub="Ліди з усіх регіональних таблиць. Зміна статусу або відповідального одразу записується в Google Таблицю."
+        sub="Усі ліди ISTO: нові приходять з Meta, статуси змінюються тут або кнопками Telegram-бота."
         right={
           <div className="flex gap-1">
             <Link className="chip" data-active={view === "list"} href={qs({ view: null })}>

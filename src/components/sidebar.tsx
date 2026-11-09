@@ -28,10 +28,10 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
   const items = isAdmin ? [...NAV, { href: "/admin", label: "Адмін", icon: Settings }] : NAV;
 
   return (
-    <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-line bg-panel/40 px-3 py-5">
+    <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-line bg-panel-2 px-3 py-6">
       <Link href={`/${suffix}`} className="px-3">
-        <div className="text-[13px] tracking-[0.32em] text-accent">ISTO</div>
-        <div className="text-[11px] text-faint mt-0.5">marketing</div>
+        <div className="text-[15px] font-light tracking-[0.42em] text-text">ISTO</div>
+        <div className="serif mt-1 text-[13px] text-muted">marketing</div>
       </Link>
       <nav className="mt-7 flex flex-col gap-0.5">
         {items.map(({ href, label, icon: Icon }) => {
@@ -41,7 +41,7 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
               key={href}
               href={href + (href === "/admin" ? "" : suffix)}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
-                active ? "bg-panel-2 text-text" : "text-muted hover:text-text"
+                active ? "bg-panel text-text shadow-[inset_2px_0_0_var(--accent)]" : "text-muted hover:text-text"
               }`}
             >
               <Icon size={15} strokeWidth={1.7} />

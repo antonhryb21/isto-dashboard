@@ -1,16 +1,16 @@
 /** The CRM pipeline. `label` is what is written to Google Sheets. */
 export const STATUSES = [
-  { code: "new", label: "New", stage: "open", color: "#60a5fa" },
-  { code: "contacted", label: "Contacted", stage: "open", color: "#818cf8" },
-  { code: "follow_up", label: "Follow-up", stage: "open", color: "#a78bfa" },
-  { code: "no_answer", label: "No answer", stage: "open", color: "#94a3b8" },
-  { code: "meeting", label: "Meeting", stage: "open", color: "#f59e0b" },
-  { code: "proposal", label: "Proposal sent", stage: "open", color: "#f97316" },
-  { code: "won", label: "Won", stage: "won", color: "#22c55e" },
-  { code: "lost", label: "Lost", stage: "lost", color: "#ef4444" },
-  { code: "not_relevant", label: "Not relevant", stage: "junk", color: "#64748b" },
-  { code: "supplier", label: "Supplier", stage: "junk", color: "#64748b" },
-  { code: "spam", label: "Spam", stage: "junk", color: "#475569" },
+  { code: "new", label: "New", stage: "open", color: "#393e49" },
+  { code: "contacted", label: "Contacted", stage: "open", color: "#5b7fa6" },
+  { code: "follow_up", label: "Follow-up", stage: "open", color: "#8a7fb0" },
+  { code: "no_answer", label: "No answer", stage: "open", color: "#a5aab0" },
+  { code: "meeting", label: "Meeting", stage: "open", color: "#c29a4b" },
+  { code: "proposal", label: "Proposal sent", stage: "open", color: "#b4704a" },
+  { code: "won", label: "Won", stage: "won", color: "#4f7a5e" },
+  { code: "lost", label: "Lost", stage: "lost", color: "#a4513f" },
+  { code: "not_relevant", label: "Not relevant", stage: "junk", color: "#60584d" },
+  { code: "supplier", label: "Supplier", stage: "junk", color: "#a39d8d" },
+  { code: "spam", label: "Spam", stage: "junk", color: "#cec7b4" },
 ] as const;
 
 export type StatusCode = (typeof STATUSES)[number]["code"];

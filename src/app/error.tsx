@@ -5,8 +5,8 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
   return (
     <main className="min-h-screen grid place-items-center px-4">
       <div className="card w-full max-w-md p-8">
-        <div className="text-[13px] tracking-[0.3em] text-accent">ISTO</div>
-        <h1 className="mt-3 text-xl font-semibold">Сторінка не завантажилась</h1>
+        <div className="text-[15px] font-light tracking-[0.42em]">ISTO</div>
+        <h1 className="display mt-4 text-[24px]">Сторінка не завантажилась</h1>
         <p className="mt-2 text-sm text-muted">
           Найчастіше причина в налаштуваннях: немає з&apos;єднання з базою або бракує змінної у Vercel. Подробиці — у Vercel → Logs
           {error.digest ? (

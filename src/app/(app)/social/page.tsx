@@ -50,16 +50,16 @@ export default async function SocialPage({ searchParams }: { searchParams: SP })
                 ) : (
                   <div className="aspect-[4/5]" />
                 )}
-                <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/85">
+                <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">
                   {p.platform === "ig" ? "IG" : "FB"} · {TYPE_LABEL[p.contentType] ?? p.contentType}
                 </span>
                 {(p.contentType === "reel" || p.contentType === "video") && (
-                  <span className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5">
+                  <span className="absolute right-2 top-2 rounded-full bg-overlay p-1.5">
                     <Play size={12} fill="white" />
                   </span>
                 )}
                 {p.boosted && (
-                  <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-[#1a1712]">
+                  <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-ink">
                     <Zap size={11} /> бустився
                   </span>
                 )}

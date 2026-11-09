@@ -25,10 +25,10 @@ export function Kpi({
   const d = current !== undefined && previous !== undefined ? delta(current, previous) : undefined;
   const good = d === null || d === undefined ? null : goodWhenDown ? d < 0 : d > 0;
   return (
-    <div className={`card p-4 ${accent ? "border-accent/50" : ""}`}>
+    <div className={`card p-5 ${accent ? "border-accent" : ""}`}>
       <div className="label">{label}</div>
-      <div className={`mt-2 text-[26px] leading-none font-semibold ${accent ? "text-accent" : ""}`}>{value}</div>
-      <div className="mt-2 flex items-center gap-2 text-[12px]">
+      <div className="metric mt-3 text-[30px]">{value}</div>
+      <div className="mt-3 flex items-center gap-2 text-[12px]">
         {d !== undefined && (
           <span className={d === null || d === 0 ? "text-faint" : good ? "text-good" : "text-bad"}>
             {d === null ? "нове" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""} ${fmtPct(Math.abs(d), 0)}`}
@@ -44,8 +44,8 @@ export function SectionTitle({ title, sub, right }: { title: string; sub?: strin
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-[22px] font-semibold">{title}</h1>
-        {sub && <p className="mt-1 text-[13px] text-muted">{sub}</p>}
+        <h1 className="display text-[32px]">{title}</h1>
+        {sub && <p className="serif mt-2 text-[15px] text-muted">{sub}</p>}
       </div>
       {right}
     </div>
