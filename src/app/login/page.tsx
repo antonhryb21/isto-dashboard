@@ -3,6 +3,10 @@ const ERRORS: Record<string, string> = {
   state: "Сесія входу застаріла. Спробуйте ще раз.",
   token: "Google не підтвердив вхід. Спробуйте ще раз.",
   profile: "Не вдалося отримати email з Google-акаунта.",
+  secret: "AUTH_SECRET у Vercel не задано або він коротший за 32 символи. Виправте змінну і зробіть Redeploy.",
+  db: "Немає з'єднання з базою даних. Перевірте, що Neon підключено до проєкту (DATABASE_URL), і зробіть Redeploy.",
+  db_tables: "У базі ще немає таблиць: міграції не виконались під час збірки. Зробіть Redeploy і перевірте лог збірки.",
+  server: "Помилка сервера під час входу. Подробиці — у Vercel → Logs.",
 };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {

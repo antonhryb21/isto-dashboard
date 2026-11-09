@@ -8,6 +8,20 @@ import { appUrl } from "@/lib/auth/app-url";
 export async function GET(request: NextRequest) {
   const base = appUrl(request);
   const fail = (code: string) => NextResponse.redirect(new URL(`/login?error=${code}`, base));
+  try {
+    return await handle(request, base, fail);
+  } catch (e) {
+    // Turn setup problems into a readable message on the login page instead of a blank 500.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("google callback failed:", e);
+    if (/AUTH_SECRET/.test(msg)) return fail("secret");
+    if (/DATABASE_URL|ECONNREFUSED|ENOTFOUND|password authentication|connect/i.test(msg)) return fail("db");
+    if (/relation .* does not exist/i.test(msg)) return fail("db_tables");
+    return fail("server");
+  }
+}
+
+async function handle(request: NextRequest, base: string, fail: (code: string) => NextResponse) {
 
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
