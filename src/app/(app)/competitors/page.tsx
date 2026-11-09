@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ExternalLink, Heart, MessageCircle, Play } from "lucide-react";
 import { parseFilters } from "@/lib/filters";
+import { explainError } from "@/lib/sync";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
 import { adLibraryUrl, competitorTable, followersSeries, topCompetitorPosts, type CompetitorRow } from "@/lib/competitors";
 import { ago, fmtCompact, fmtDate, fmtInt, fmtPct } from "@/lib/format";
@@ -228,7 +229,7 @@ function Account({ r }: { r: CompetitorRow }) {
           @{r.username}
         </a>
         {r.lastError && (
-          <div className="max-w-56 truncate text-[11px] text-bad" title={r.lastError}>
+          <div className="max-w-56 truncate text-[11px] text-bad" title={explainError(r.lastError)}>
             не вдалося оновити
           </div>
         )}

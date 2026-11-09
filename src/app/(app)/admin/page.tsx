@@ -11,7 +11,7 @@ import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-contro
 import { listCompetitors } from "@/lib/competitors";
 import { listTargets, monthBounds } from "@/lib/targets";
 import { fmtInt, fmtMoney } from "@/lib/format";
-import { runProblems, sheetsEnabled } from "@/lib/sync";
+import { explainError, runProblems, sheetsEnabled } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
@@ -214,7 +214,7 @@ export default async function AdminPage() {
               <span className="font-medium">{c.name}</span>
               <span className="text-faint">@{c.username}</span>
               {c.adLibraryPageIds.length > 0 && <span className="text-[12px] text-faint">Ad Library: {c.adLibraryPageIds.join(", ")}</span>}
-              {c.lastError && <span className="text-[12px] text-bad">{c.lastError}</span>}
+              {c.lastError && <span className="text-[12px] text-bad">{explainError(c.lastError)}</span>}
               {!c.isOwn && <RemoveCompetitor username={c.username} />}
             </div>
           ))}
