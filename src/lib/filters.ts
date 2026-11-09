@@ -17,12 +17,18 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (s: string, n: number) => iso(new Date(Date.parse(s + "T00:00:00Z") + n * 86_400_000));
 
 export const PRESETS = [
-  { key: "7d", label: "7 днів" },
-  { key: "30d", label: "30 днів" },
-  { key: "90d", label: "90 днів" },
-  { key: "month", label: "Цей місяць" },
-  { key: "prev_month", label: "Минулий місяць" },
+  { key: "1d", label: "1 день", days: 1 },
+  { key: "7d", label: "1 тиждень", days: 7 },
+  { key: "30d", label: "1 місяць", days: 30 },
+  { key: "365d", label: "1 рік", days: 365 },
 ];
+/** Older links (bookmarks, shared URLs) keep working. */
+const LEGACY_DAYS: Record<string, number> = { "90d": 90 };
+
+/** True when the URL picks a period explicitly (a preset or a date range). */
+export function hasPeriod(sp: SP) {
+  return Boolean(sp.p || (sp.from && sp.to));
+}
 
 /** Reads URL search params. The previous period has the same length and ends the day before `from`. */
 export function parseFilters(sp: SP): Filters {
@@ -49,9 +55,9 @@ export function parseFilters(sp: SP): Filters {
     to = addDays(firstThis, -1);
     from = to.slice(0, 8) + "01";
   } else {
-    const n = preset === "7d" ? 7 : preset === "90d" ? 90 : 30;
-    if (!["7d", "90d"].includes(preset)) preset = "30d";
-    from = addDays(today, -(n - 1));
+    const n = PRESETS.find((p) => p.key === preset)?.days ?? LEGACY_DAYS[preset];
+    if (!n) preset = "30d";
+    from = addDays(today, -((n ?? 30) - 1));
   }
 
   // Month presets compare with the whole previous month; others with the same number of days before.

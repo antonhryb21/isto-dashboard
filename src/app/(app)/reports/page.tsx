@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { listRegions } from "@/lib/regions";
-import { GRAINS, buckets, firstDataYear, reportCurrencies, reportData, type Grain, type ReportCell } from "@/lib/reports";
+import { hasPeriod, parseFilters } from "@/lib/filters";
+import { FilterBar } from "@/components/filter-bar";
+import { GRAINS, MAX_COLUMNS, buckets, firstDataYear, reportCurrencies, reportData, type Grain, type ReportCell } from "@/lib/reports";
 import { fmtInt, fmtMoney, fmtPct } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { CsvButton } from "@/components/csv-button";
@@ -46,13 +49,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
   const thisYear = Number(today.slice(0, 4));
   const page = Math.max(0, Number(one("page") ?? 0) || 0);
   const region = one("region");
+  const period = hasPeriod(sp) ? parseFilters(sp) : null;
 
   const [regions, currencies, firstYear] = await Promise.all([listRegions(), reportCurrencies(), firstDataYear()]);
   const year = Math.min(thisYear, Math.max(firstYear, Number(one("year") ?? thisYear) || thisYear));
   const regionCurrency = region ? regions.find((r) => r.code === region)?.currency : null;
-  const cur = one("cur") ?? (regionCurrency && currencies.includes(regionCurrency) ? regionCurrency : currencies[0]) ?? "AED";
+  const cur = (regionCurrency && currencies.includes(regionCurrency) ? regionCurrency : one("cur")) ?? currencies[0] ?? "AED";
 
-  const cols = buckets(grain, today, { page, year, firstYear });
+  const cols = buckets(grain, today, { page, year, firstYear, range: period ? { from: period.from, to: period.to } : null });
+  const capped = Boolean(period) && cols.length >= MAX_COLUMNS;
   const { cells, total } = await reportData(grain, cols, { currency: currencies.length ? cur : null, region });
 
   const qs = (patch: Record<string, string | number | null>) => {
@@ -82,8 +87,17 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         right={<CsvButton rows={csv} filename={`isto-report-${grain}-${cols[0]?.from ?? today}.csv`} />}
       />
 
+      <Suspense>
+        <FilterBar
+          regions={regions.map((r) => ({ value: r.code, label: r.name }))}
+          showPlatform={false}
+          autoRange={cols.length ? { from: cols[0].from, to: cols[cols.length - 1].to } : undefined}
+        />
+      </Suspense>
+
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <div className="flex gap-1">
+        <span className="text-[12px] text-faint">Розбити по:</span>
+        <div className="-ml-3 flex gap-1">
           {GRAINS.map((g) => (
             <Link key={g.key} className="chip" data-active={grain === g.key} href={qs({ g: g.key, page: null })}>
               {g.label}
@@ -91,7 +105,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
           ))}
         </div>
 
-        {grain === "month" && years.length > 1 && (
+        {!period && grain === "month" && years.length > 1 && (
           <div className="flex gap-1">
             {years.map((y) => (
               <Link key={y} className="chip" data-active={year === y} href={qs({ year: y === thisYear ? null : y })}>
@@ -101,7 +115,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
           </div>
         )}
 
-        {(grain === "day" || grain === "week") && (
+        {!period && (grain === "day" || grain === "week") && (
           <div className="flex items-center gap-1">
             <Link className="chip" href={qs({ page: page + 1 })}>
               ← раніше
@@ -113,17 +127,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
             )}
           </div>
         )}
-
-        <div className="flex flex-wrap gap-1">
-          <Link className="chip" data-active={!region} href={qs({ region: null, cur: null })}>
-            Усі регіони
-          </Link>
-          {regions.map((r) => (
-            <Link key={r.code} className="chip" data-active={region === r.code} href={qs({ region: r.code, cur: null })}>
-              {r.name}
-            </Link>
-          ))}
-        </div>
 
         {currencies.length > 1 && !regionCurrency && (
           <div className="flex items-center gap-1 text-[12px] text-faint">
@@ -165,6 +168,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
           </tbody>
         </table>
       </div>
+
+      {capped && <p className="text-[12px] text-bad">Показано перші {MAX_COLUMNS} колонок. Для довгого періоду оберіть більший крок.</p>}
 
       <div className="flex flex-col gap-1 text-[12px] text-faint">
         <p>

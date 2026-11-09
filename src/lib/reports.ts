@@ -49,7 +49,12 @@ const shortDate = (s: string) => `${Number(s.slice(8, 10))} ${MON_SHORT[Number(s
  * The columns of a report. Day and week reports page back in fixed windows (`page` 0 = the latest);
  * month reports show one calendar year; year reports show every year from `firstYear`.
  */
-export function buckets(grain: Grain, today: string, opts: { page: number; year: number; firstYear: number }): Bucket[] {
+export function buckets(
+  grain: Grain,
+  today: string,
+  opts: { page: number; year: number; firstYear: number; range?: { from: string; to: string } | null },
+): Bucket[] {
+  if (opts.range) return rangeBuckets(grain, opts.range.from, opts.range.to);
   const out: Bucket[] = [];
   if (grain === "day") {
     const end = addDays(today, -opts.page * 14);
@@ -77,6 +82,41 @@ export function buckets(grain: Grain, today: string, opts: { page: number; year:
     for (let y = Math.min(opts.firstYear, thisYear); y <= thisYear; y++) {
       out.push({ key: `${y}-01-01`, from: `${y}-01-01`, to: `${y}-12-31`, label: String(y), group: "Роки" });
     }
+  }
+  return out;
+}
+
+export const MAX_COLUMNS = 400;
+
+const startOf = (grain: Grain, d: string) =>
+  grain === "day" ? d : grain === "week" ? mondayOf(d) : grain === "month" ? d.slice(0, 8) + "01" : d.slice(0, 5) + "01-01";
+
+function nextStart(grain: Grain, start: string) {
+  if (grain === "day") return addDays(start, 1);
+  if (grain === "week") return addDays(start, 7);
+  const y = Number(start.slice(0, 4));
+  const m = Number(start.slice(5, 7));
+  if (grain === "year") return `${y + 1}-01-01`;
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+}
+
+/** Columns for a chosen period: whole days/weeks/months/years, with the first and last clipped to the period. */
+function rangeBuckets(grain: Grain, from: string, to: string): Bucket[] {
+  const out: Bucket[] = [];
+  const multiYear = from.slice(0, 4) !== to.slice(0, 4);
+  for (let start = startOf(grain, from); start <= to && out.length < MAX_COLUMNS; start = nextStart(grain, start)) {
+    const end = addDays(nextStart(grain, start), -1);
+    const a = start < from ? from : start;
+    const b = end > to ? to : end;
+    const clipped = a !== start || b !== end;
+    let label: string;
+    if (grain === "day") label = shortDate(a);
+    else if (grain === "week") label = `${shortDate(a)} – ${shortDate(b)}`;
+    else if (grain === "month") {
+      label = `${MONTHS[Number(start.slice(5, 7)) - 1]}${multiYear ? ` ${start.slice(0, 4)}` : ""}`;
+      if (clipped) label += ` (${Number(a.slice(8, 10))}–${Number(b.slice(8, 10))})`;
+    } else label = clipped ? `${start.slice(0, 4)} (${shortDate(a)} – ${shortDate(b)})` : start.slice(0, 4);
+    out.push({ key: start, from: a, to: b, label, group: start.slice(0, 4) });
   }
   return out;
 }

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { PRESETS } from "@/lib/filters";
+import { PRESETS, parseFilters } from "@/lib/filters";
 
 type Option = { value: string; label: string };
 
@@ -14,6 +14,8 @@ export function FilterBar({
   showCampaign = false,
   showSearch = false,
   searchPlaceholder = "Пошук",
+  showRegion = true,
+  autoRange,
 }: {
   regions: Option[];
   campaigns?: Option[];
@@ -22,12 +24,21 @@ export function FilterBar({
   showCampaign?: boolean;
   showSearch?: boolean;
   searchPlaceholder?: string;
+  showRegion?: boolean;
+  /** Range a page shows when the URL picks no period (Reports); no preset is highlighted then. */
+  autoRange?: { from: string; to: string };
 }) {
   const router = useRouter();
   const path = usePathname();
   const sp = useSearchParams();
   const [pending, start] = useTransition();
-  const preset = sp.get("from") ? "custom" : (sp.get("p") ?? "30d");
+  const f = parseFilters(Object.fromEntries(sp.entries()));
+  const explicit = Boolean(sp.get("p") || (sp.get("from") && sp.get("to")));
+  const auto = autoRange && !explicit;
+  const preset = auto ? null : f.preset;
+  // The date fields always show the range in effect, so a preset can be fine-tuned by editing a date.
+  const from = auto ? autoRange.from : f.from;
+  const to = auto ? autoRange.to : f.to;
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(sp.toString());
@@ -47,31 +58,41 @@ export function FilterBar({
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
+        <span className={`text-[12px] ${preset === "custom" ? "text-text" : "text-faint"}`}>Свій період:</span>
         <input
           type="date"
           className="input"
-          value={sp.get("from") ?? ""}
-          onChange={(e) => set({ from: e.target.value, to: sp.get("to") ?? e.target.value, p: null })}
+          value={from}
+          max={to}
+          onChange={(e) => e.target.value && set({ from: e.target.value, to: e.target.value > to ? e.target.value : to, p: null })}
           aria-label="Від"
         />
         <span className="text-faint">–</span>
         <input
           type="date"
           className="input"
-          value={sp.get("to") ?? ""}
-          onChange={(e) => set({ to: e.target.value, from: sp.get("from") ?? e.target.value, p: null })}
+          value={to}
+          min={from}
+          onChange={(e) => e.target.value && set({ to: e.target.value, from: e.target.value < from ? e.target.value : from, p: null })}
           aria-label="До"
         />
+        {autoRange && explicit && (
+          <button className="text-[12px] text-faint underline-offset-2 hover:underline" onClick={() => set({ p: null, from: null, to: null })}>
+            скинути
+          </button>
+        )}
       </div>
-      <select className="input" value={sp.get("region") ?? ""} onChange={(e) => set({ region: e.target.value })}>
-        <option value="">Усі регіони</option>
-        {regions.map((r) => (
-          <option key={r.value} value={r.value}>
-            {r.label}
-          </option>
-        ))}
-      </select>
+      {showRegion && (
+        <select className="input" value={sp.get("region") ?? ""} onChange={(e) => set({ region: e.target.value })}>
+          <option value="">Усі регіони</option>
+          {regions.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      )}
       {showPlatform && (
         <select className="input" value={sp.get("platform") ?? ""} onChange={(e) => set({ platform: e.target.value })}>
           <option value="">Усі платформи</option>
