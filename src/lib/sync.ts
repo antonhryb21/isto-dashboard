@@ -6,6 +6,10 @@ import { DEFAULT_LEAD_SPREADSHEETS, DEFAULT_REGIONS } from "@/lib/config";
 import { syncAdStructure, syncInsights } from "@/lib/meta/ads";
 import { syncFacebook, syncInstagram } from "@/lib/meta/social";
 import { discoverSources, importAllSources } from "@/lib/sheets/sync";
+import { syncMetaLeads } from "@/lib/meta/leadgen";
+
+/** Live Google Sheets sync is optional: on only when a service account is configured. */
+export const sheetsEnabled = () => !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
 
 export type SyncKind = "quick" | "daily" | "backfill";
 
@@ -14,6 +18,7 @@ const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISO
 /** Idempotent first-run setup: regions and the known lead spreadsheets. */
 export async function ensureSeed() {
   for (const r of DEFAULT_REGIONS) await db.insert(regions).values(r).onConflictDoNothing();
+  if (!sheetsEnabled()) return;
   for (const s of DEFAULT_LEAD_SPREADSHEETS) {
     try {
       await discoverSources(s.spreadsheetId, s.regionCode, s.historySheetName);
@@ -24,8 +29,9 @@ export async function ensureSeed() {
 }
 
 /**
- * quick    — last 3 days of ad metrics, lead sheets, recent Instagram posts (every 10–15 min / on demand)
- * daily    — ad structure + creatives, 30 days of metrics, IG + FB posts with insights, lead sheets
+ * quick    — last 3 days of ad metrics, recent Instagram posts (on page view when stale / on demand)
+ * daily    — ad structure + creatives, 30 days of metrics, IG + FB posts with insights,
+ *            leads from Meta forms for the last 3 days (catches anything the webhook missed)
  * backfill — up to `months` of history, in 30-day chunks
  */
 export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
@@ -51,7 +57,7 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
 
   if (kind === "quick") {
     await step("insights", () => syncInsights(day(2), day(0)));
-    await step("leads", () => importAllSources());
+    if (sheetsEnabled()) await step("sheets", () => importAllSources());
     await step("instagram", () => syncInstagram(7));
   }
   if (kind === "daily") {
@@ -59,7 +65,8 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("insights", () => syncInsights(day(30), day(0)));
     await step("instagram", () => syncInstagram(30));
     await step("facebook", () => syncFacebook(30));
-    await step("leads", () => importAllSources());
+    await step("metaLeads", () => syncMetaLeads(3));
+    if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
   if (kind === "backfill") {
     const months = Math.min(opts.months ?? 12, 36);
@@ -77,7 +84,8 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     report.insights = chunks;
     await step("instagram", () => syncInstagram(120));
     await step("facebook", () => syncFacebook(120, 1000));
-    await step("leads", () => importAllSources());
+    await step("metaLeads", () => syncMetaLeads(90));
+    if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
 
   const failed = Object.values(report).some((v) => typeof v === "object" && v !== null && "error" in v);

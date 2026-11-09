@@ -6,6 +6,8 @@ import { listRegions } from "@/lib/regions";
 import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { RegionForm, RemoveUser, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
+import { CsvImport } from "@/components/csv-import";
+import { sheetsEnabled } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
@@ -16,7 +18,7 @@ const ENV = [
   ["META_SYSTEM_USER_TOKEN", "Токен Meta"],
   ["META_APP_SECRET", "App Secret Meta"],
   ["META_WEBHOOK_VERIFY_TOKEN", "Токен вебхука лідів"],
-  ["GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "Сервісний акаунт Google"],
+  ["LEADS_API_TOKEN", "Токен для Telegram-бота (n8n)"],
   ["GOOGLE_OAUTH_CLIENT_ID", "Вхід через Google"],
 ] as const;
 
@@ -30,6 +32,7 @@ export default async function AdminPage() {
   ]);
   const regionOpts = regions.map((r) => ({ code: r.code, name: r.name }));
   const webhookUrl = `${process.env.APP_URL ?? ""}/api/webhooks/meta`;
+  const botUrl = `${process.env.APP_URL ?? ""}/api/leads/status`;
 
   return (
     <div className="flex max-w-6xl flex-col gap-6">
@@ -49,6 +52,11 @@ export default async function AdminPage() {
         <p className="mt-4 text-[12px] text-faint">
           Вебхук для лідів у Meta (App → Webhooks → Page → leadgen): <code className="text-muted">{webhookUrl}</code>, токен перевірки = значення
           META_WEBHOOK_VERIFY_TOKEN. Потім натисніть «Підписати сторінку на ліди».
+        </p>
+        <p className="mt-2 text-[12px] text-faint">
+          Статуси з Telegram-бота: <code className="text-muted">POST {botUrl}</code>, заголовок{" "}
+          <code className="text-muted">Authorization: Bearer LEADS_API_TOKEN</code>, тіло{" "}
+          <code className="text-muted">{`{"lead_id":"<id ліда Meta>","status":"Contacted","changed_by":"@нік"}`}</code>.
         </p>
       </section>
 
@@ -123,6 +131,18 @@ export default async function AdminPage() {
       </section>
 
       <section className="card p-5">
+        <div className="label">Імпорт історії лідів</div>
+        <p className="mt-1 text-[12px] text-faint">
+          Google Таблиця → вкладка з лідами → Файл → Завантажити → CSV. Можна обрати кілька файлів одразу. Один лід у кількох вкладках
+          обʼєднається; статуси, вже змінені в CRM або ботом, імпорт не перезапише.
+        </p>
+        <div className="mt-3">
+          <CsvImport regions={regionOpts} />
+        </div>
+      </section>
+
+      {sheetsEnabled() && (
+      <section className="card p-5">
         <div className="label">Таблиці з лідами</div>
         <p className="mt-1 text-[12px] text-faint">
           Кожна вкладка — окреме джерело. Вимкніть вкладки, які дублюють ліди. Нову таблицю спершу відкрийте для сервісного акаунта Google (редактор).
@@ -168,6 +188,7 @@ export default async function AdminPage() {
           </tbody>
         </table>
       </section>
+      )}
     </div>
   );
 }

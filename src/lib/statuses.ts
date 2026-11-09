@@ -80,3 +80,16 @@ export function funnelDepth(code: StatusCode): number {
       return -1; // spam, supplier, not relevant: out of the funnel
   }
 }
+
+/**
+ * Strict version for external callers (the Telegram bot): accepts a code ("follow_up"),
+ * a label ("Follow-up") or a known alias; returns null instead of guessing.
+ */
+export function parseStatus(raw: string | null | undefined): StatusCode | null {
+  const key = (raw ?? "").trim().toLowerCase();
+  if (!key) return null;
+  if (STATUS_BY_CODE[key as StatusCode]) return key as StatusCode;
+  const byLabel = STATUSES.find((s) => s.label.toLowerCase() === key);
+  if (byLabel) return byLabel.code;
+  return ALIASES[key] ?? null;
+}

@@ -9,5 +9,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|api/auth|api/webhooks|api/cron|_next|favicon.ico).*)"],
+  matcher: ["/((?!login|api/auth|api/webhooks|api/cron|api/leads|_next|favicon.ico).*)"],
 };

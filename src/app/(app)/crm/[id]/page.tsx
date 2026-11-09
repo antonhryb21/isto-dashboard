@@ -88,7 +88,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               {events.map((e) => (
                 <li key={e.id} className="border-l-2 border-line pl-3 text-[13px]">
                   <div className="text-[11.5px] text-faint">
-                    {fmtDate(e.createdAt, true)} · {e.author === "sheet" ? "таблиця / бот" : e.author === "meta" ? "Meta" : e.author}
+                    {fmtDate(e.createdAt, true)} · {authorLabel(e.author)}
                   </div>
                   <div className="mt-0.5">
                     {e.type === "comment" && <p className="whitespace-pre-wrap">{e.text}</p>}
@@ -154,4 +154,13 @@ function Row({ k, v }: { k: string; v: string | null }) {
       <dd className="break-words">{v ?? "—"}</dd>
     </div>
   );
+}
+
+function authorLabel(a: string | null) {
+  if (!a) return "—";
+  if (a === "sheet") return "Google Таблиця";
+  if (a === "import") return "імпорт історії";
+  if (a === "meta") return "Meta";
+  if (a.startsWith("telegram:")) return `Telegram ${a.slice(9)}`;
+  return a;
 }

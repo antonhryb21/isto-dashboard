@@ -32,11 +32,13 @@ export type IncomingLead = {
 };
 
 /**
- * Insert or update a lead. Contact data and ad attribution are refreshed; status and owner
- * from a sheet win over the database (the Telegram bot edits the sheet), except within two
- * minutes of a CRM edit, so a sync running mid-edit can't undo it.
+ * Insert or update a lead. Contact data and ad attribution are refreshed.
+ * - "meta":   lead from the Meta webhook/API — never touches status or owner.
+ * - "sheet":  live Google Sheets sync — sheet status wins, except within two minutes of a CRM edit.
+ * - "import": one-off history import (CSV) — status/owner applied only to leads nobody has
+ *             touched in the CRM or the bot yet, so re-importing an old file can't undo work.
  */
-export async function upsertLead(input: IncomingLead, author: "sheet" | "meta"): Promise<"created" | "updated" | "same"> {
+export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" | "import"): Promise<"created" | "updated" | "same"> {
   const [existing] = await db.select().from(leads).where(eq(leads.metaLeadId, input.metaLeadId)).limit(1);
 
   if (!existing) {
@@ -65,7 +67,13 @@ export async function upsertLead(input: IncomingLead, author: "sheet" | "meta"):
   };
   (["fullName", "phone", "email", "city", "campaignId", "campaignName", "adsetId", "adsetName", "adId", "adName", "formId", "formName", "platform", "regionCode"] as const).forEach(keep);
   if (Object.keys(input.answers).length && JSON.stringify(input.answers) !== JSON.stringify(existing.answers)) patch.answers = input.answers;
-  if (input.sheetComment !== undefined && input.sheetComment !== existing.sheetComment) patch.sheetComment = input.sheetComment;
+  if (author === "import") {
+    // Merge comments from every tab the lead appears in instead of overwriting.
+    const c = input.sheetComment?.trim();
+    if (c && !(existing.sheetComment ?? "").includes(c)) patch.sheetComment = [existing.sheetComment, c].filter(Boolean).join("\n");
+  } else if (input.sheetComment !== undefined && input.sheetComment !== existing.sheetComment) {
+    patch.sheetComment = input.sheetComment;
+  }
 
   if (input.sourceId) {
     if (!existing.sourceId) patch.sourceId = input.sourceId;
@@ -76,17 +84,22 @@ export async function upsertLead(input: IncomingLead, author: "sheet" | "meta"):
   const isOwnSource = !existing.sourceId || existing.sourceId === input.sourceId;
   const events: (typeof leadEvents.$inferInsert)[] = [];
 
-  if (author === "sheet" && isOwnSource && !recentCrmEdit && input.statusRaw !== undefined) {
+  const fromTable = author === "sheet" || author === "import";
+  // Import: the same lead often sits in several tabs; never let an old "CREATED" row undo a real status.
+  const statusAllowed =
+    author === "sheet" ? isOwnSource && !recentCrmEdit : author === "import" ? !existing.statusUpdatedAt && existing.status === "new" : false;
+
+  if (fromTable && statusAllowed && input.statusRaw !== undefined && input.statusRaw !== "") {
     const next = normalizeStatus(input.statusRaw);
     if (next !== existing.status) {
       patch.status = next;
       patch.statusRaw = input.statusRaw ?? null;
-      events.push({ leadId: existing.id, type: "status", fromValue: existing.status, toValue: next, author: "sheet" });
+      events.push({ leadId: existing.id, type: "status", fromValue: existing.status, toValue: next, author });
       if (!existing.firstContactAt && existing.status === "new" && next !== "new") patch.firstContactAt = new Date();
     }
   }
-  if (author === "sheet" && isOwnSource && input.owner && input.owner !== existing.owner) {
-    events.push({ leadId: existing.id, type: "owner", fromValue: existing.owner, toValue: input.owner, author: "sheet" });
+  if (fromTable && (author === "sheet" ? isOwnSource : !existing.owner) && input.owner && input.owner !== existing.owner) {
+    events.push({ leadId: existing.id, type: "owner", fromValue: existing.owner, toValue: input.owner, author });
     patch.owner = input.owner;
   }
 

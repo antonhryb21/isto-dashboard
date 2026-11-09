@@ -2,7 +2,7 @@ import "server-only";
 import { META } from "@/lib/config";
 import { detectRegion, listRegions } from "@/lib/regions";
 import { upsertLead } from "@/lib/leads";
-import { graphAsPage, graphPost, pageToken } from "./client";
+import { graphAllAsPage, graphAsPage, graphPost, pageToken } from "./client";
 
 type FieldData = { name: string; values: string[] };
 type ApiLead = {
@@ -33,15 +33,6 @@ export async function ingestLead(leadgenId: string) {
     fields:
       "id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,platform,is_organic,field_data",
   });
-  const fields = Object.fromEntries((l.field_data ?? []).map((f) => [f.name, f.values.join(", ")]));
-  const pick = (keys: string[]) => keys.map((k) => fields[k]).find(Boolean) ?? null;
-  const used = new Set(Object.values(CONTACT).flat());
-  const answers = Object.fromEntries(
-    Object.entries(fields)
-      .filter(([k]) => !used.has(k))
-      .map(([k, v]) => [k.replace(/[_:?]+$/g, "").replace(/_/g, " "), v]),
-  );
-
   let formName: string | null = null;
   if (l.form_id) {
     try {
@@ -51,33 +42,74 @@ export async function ingestLead(leadgenId: string) {
     }
   }
   const allRegions = await listRegions();
-  return upsertLead(
-    {
-      metaLeadId: l.id,
-      createdTime: new Date(l.created_time),
-      regionCode: detectRegion(allRegions, l.campaign_name, l.adset_name, formName),
-      platform: l.platform ?? null,
-      isOrganic: !!l.is_organic,
-      campaignId: l.campaign_id ?? null,
-      campaignName: l.campaign_name ?? null,
-      adsetId: l.adset_id ?? null,
-      adsetName: l.adset_name ?? null,
-      adId: l.ad_id ?? null,
-      adName: l.ad_name ?? null,
-      formId: l.form_id ?? null,
-      formName,
-      fullName: pick(CONTACT.full_name),
-      phone: pick(CONTACT.phone),
-      email: pick(CONTACT.email),
-      city: pick(CONTACT.city),
-      answers,
-    },
-    "meta",
-  );
+  return upsertLead(toIncoming(l, formName, allRegions), "meta");
 }
 
 /** Subscribe the ISTO Page to leadgen events for our app (one-time; safe to repeat). */
 export async function subscribePageToLeadgen() {
   // Page subscriptions must be made with a Page access token.
   return graphPost(`${META.pageId}/subscribed_apps`, { subscribed_fields: "leadgen" }, await pageToken());
+}
+
+type FormLead = ApiLead;
+
+/**
+ * Pull leads straight from the Page's lead forms. Safety net for missed webhooks (daily)
+ * and the way to load the last ~90 days on first run. Existing leads are left as they are.
+ */
+export async function syncMetaLeads(sinceDays: number) {
+  const since = Math.floor((Date.now() - sinceDays * 86_400_000) / 1000);
+  const forms = await graphAllAsPage<{ id: string; name?: string; status?: string }>(`${META.pageId}/leadgen_forms`, {
+    fields: "id,name,status",
+    limit: 100,
+  });
+  const allRegions = await listRegions();
+  let created = 0;
+  for (const form of forms) {
+    const list = await graphAllAsPage<FormLead>(
+      `${form.id}/leads`,
+      {
+        fields: "id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,platform,is_organic,field_data",
+        filtering: JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]),
+        limit: 100,
+      },
+      5000,
+    );
+    for (const l of list) {
+      const res = await upsertLead(toIncoming(l, form.name ?? null, allRegions), "meta");
+      if (res === "created") created++;
+    }
+  }
+  return { forms: forms.length, created };
+}
+
+function toIncoming(l: ApiLead, formName: string | null, allRegions: Awaited<ReturnType<typeof listRegions>>) {
+  const fields = Object.fromEntries((l.field_data ?? []).map((f) => [f.name, f.values.join(", ")]));
+  const pick = (keys: string[]) => keys.map((k) => fields[k]).find(Boolean) ?? null;
+  const used = new Set(Object.values(CONTACT).flat());
+  const answers = Object.fromEntries(
+    Object.entries(fields)
+      .filter(([k]) => !used.has(k))
+      .map(([k, v]) => [k.replace(/[_:?]+$/g, "").replace(/_/g, " "), v]),
+  );
+  return {
+    metaLeadId: l.id,
+    createdTime: new Date(l.created_time),
+    regionCode: detectRegion(allRegions, l.campaign_name, l.adset_name, formName),
+    platform: l.platform ?? null,
+    isOrganic: !!l.is_organic,
+    campaignId: l.campaign_id ?? null,
+    campaignName: l.campaign_name ?? null,
+    adsetId: l.adset_id ?? null,
+    adsetName: l.adset_name ?? null,
+    adId: l.ad_id ?? null,
+    adName: l.ad_name ?? null,
+    formId: l.form_id ?? null,
+    formName,
+    fullName: pick(CONTACT.full_name),
+    phone: pick(CONTACT.phone),
+    email: pick(CONTACT.email),
+    city: pick(CONTACT.city),
+    answers,
+  };
 }
