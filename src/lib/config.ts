@@ -46,3 +46,8 @@ export const DEFAULT_COMPETITORS = [
   { username: "_saota", name: "SAOTA", isOwn: false, sortOrder: 4, adLibraryPageIds: [] },
   { username: "nkey.architects", name: "NKEY Architects", isOwn: false, sortOrder: 5, adLibraryPageIds: ["107783874508942", "234116866451525"] },
 ];
+
+/** Lead response target: a lead still in "New" after this many minutes is overdue (highlighted in CRM, sent in alerts). */
+export const SLA_MINUTES = Number(process.env.LEAD_SLA_MINUTES ?? 30);
+/** Only recent leads count as overdue; older "New" ones are usually imported history. */
+export const SLA_LOOKBACK_DAYS = 7;

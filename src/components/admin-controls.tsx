@@ -3,6 +3,9 @@
 import { useActionState, useState, useTransition } from "react";
 import {
   addSpreadsheetAction,
+  deleteTargetAction,
+  saveTargetAction,
+  sendDigestAction,
   removeUserAction,
   saveRegionAction,
   saveUserAction,
@@ -121,5 +124,51 @@ export function SyncButtons() {
       {pending && <span className="text-[12px] text-muted">Виконується, це може тривати до кількох хвилин…</span>}
       {!pending && r && <span className={`max-w-3xl break-words text-[12px] ${r.ok ? "text-good" : "text-bad"}`}>{r.message}</span>}
     </div>
+  );
+}
+
+export function TargetForm({ regions, defaultMonth }: { regions: { code: string; name: string; currency: string }[]; defaultMonth: string }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(saveTargetAction, null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input name="month" type="month" defaultValue={defaultMonth} required className="input" />
+      <select name="region" className="input" required defaultValue={regions[0]?.code}>
+        {regions.map((r) => (
+          <option key={r.code} value={r.code}>
+            {r.name} ({r.currency})
+          </option>
+        ))}
+      </select>
+      <input name="budget" inputMode="decimal" placeholder="Бюджет" className="input w-28" />
+      <input name="leads" inputMode="numeric" placeholder="Ліди" className="input w-20" />
+      <input name="qualified" inputMode="numeric" placeholder="Якісні" className="input w-20" />
+      <input name="deals" inputMode="numeric" placeholder="Угоди" className="input w-20" />
+      <button className="btn btn-accent" disabled={pending}>
+        Зберегти
+      </button>
+      <Msg r={state} />
+    </form>
+  );
+}
+
+export function DeleteTarget({ month, region }: { month: string; region: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button className="text-[12px] text-muted hover:text-bad" disabled={pending} onClick={() => start(async () => void (await deleteTargetAction(month, region)))}>
+      прибрати
+    </button>
+  );
+}
+
+export function SendDigestButton() {
+  const [pending, start] = useTransition();
+  const [r, setR] = useState<ActionResult | null>(null);
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <button className="btn" disabled={pending} onClick={() => start(async () => setR(await sendDigestAction()))}>
+        {pending ? "Надсилаю…" : "Надіслати звіт зараз"}
+      </button>
+      <Msg r={r} />
+    </span>
   );
 }

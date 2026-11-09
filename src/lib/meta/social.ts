@@ -1,11 +1,12 @@
 import "server-only";
+import { localDate } from "@/lib/dates";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { accountSnapshots, ads, socialPosts, socialPostSnapshots } from "@/db/schema";
 import { META } from "@/lib/config";
 import { graph, graphAll, graphAsPage, graphAllAsPage, MetaError } from "./client";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDate();
 
 type Metrics = Partial<
   Record<"reach" | "saves" | "shares" | "views" | "likes" | "comments" | "profileVisits" | "follows" | "totalInteractions", number>

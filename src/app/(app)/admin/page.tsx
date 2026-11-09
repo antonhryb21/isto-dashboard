@@ -5,11 +5,13 @@ import { requireUser } from "@/lib/auth/current-user";
 import { listRegions } from "@/lib/regions";
 import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
-import { RegionForm, RemoveUser, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
+import { DeleteTarget, RegionForm, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
 import { CsvImport } from "@/components/csv-import";
 import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
 import { listCompetitors } from "@/lib/competitors";
-import { sheetsEnabled } from "@/lib/sync";
+import { listTargets, monthBounds } from "@/lib/targets";
+import { fmtInt, fmtMoney } from "@/lib/format";
+import { runProblems, sheetsEnabled } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
@@ -22,16 +24,19 @@ const ENV = [
   ["META_WEBHOOK_VERIFY_TOKEN", "Токен вебхука лідів"],
   ["LEADS_API_TOKEN", "Токен для Telegram-бота (n8n)"],
   ["GOOGLE_OAUTH_CLIENT_ID", "Вхід через Google"],
+  ["TELEGRAM_BOT_TOKEN", "Telegram-бот для звітів (необовʼязково)"],
+  ["TELEGRAM_CHAT_ID", "Чат для звітів (необовʼязково)"],
 ] as const;
 
 export default async function AdminPage() {
   const me = await requireUser("admin");
-  const [people, regions, sources, runs, rivals] = await Promise.all([
+  const [people, regions, sources, runs, rivals, plan] = await Promise.all([
     db.select().from(users).orderBy(asc(users.email)),
     listRegions(),
     db.select().from(leadSources).orderBy(asc(leadSources.spreadsheetId), asc(leadSources.sheetName)),
     db.select().from(syncRuns).orderBy(desc(syncRuns.startedAt)).limit(8),
     listCompetitors(),
+    listTargets(),
   ]);
   const regionOpts = regions.map((r) => ({ code: r.code, name: r.name }));
   const webhookUrl = `${process.env.APP_URL ?? ""}/api/webhooks/meta`;
@@ -80,17 +85,24 @@ export default async function AdminPage() {
             {runs.map((r) => (
               <tr key={r.id}>
                 <td className="whitespace-nowrap text-muted">{fmtDate(r.startedAt, true)}</td>
-                <td>{r.kind}</td>
+                <td>{{ quick: "швидке", daily: "щоденне", backfill: "історія" }[r.kind] ?? r.kind}</td>
                 <td className="max-w-2xl">
                   {r.finishedAt === null ? (
                     <span className="text-muted">триває…</span>
                   ) : r.ok ? (
                     <span className="text-good">успішно</span>
                   ) : (
-                    <details>
-                      <summary className="cursor-pointer text-bad">з помилками</summary>
-                      <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-muted">{r.message}</pre>
-                    </details>
+                    <div className="flex flex-col gap-0.5">
+                      {runProblems(r).map((p) => (
+                        <span key={p.step + p.error} className="text-bad">
+                          <span className="font-medium">{p.step}:</span> {p.error}
+                        </span>
+                      ))}
+                      <details>
+                        <summary className="cursor-pointer text-[11px] text-faint">технічні подробиці</summary>
+                        <pre className="mt-2 whitespace-pre-wrap break-all text-[11px] text-muted">{r.message}</pre>
+                      </details>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -130,6 +142,62 @@ export default async function AdminPage() {
         </div>
         <div className="mt-3">
           <RegionForm />
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <div className="label">Звіти й тривоги в Telegram</div>
+        <p className="mt-1 text-[12px] text-faint">
+          Щоранку о 07:00 за Дубаєм бот надсилає: витрати, ліди і CPL за вчора, прогрес плану місяця і тривоги — CPL вище середнього на 50%+,
+          кампанії, що 3 дні витрачають без лідів, ліди, які чекають контакту довше {process.env.LEAD_SLA_MINUTES ?? 30} хв, збої оновлення даних.
+          Потрібні змінні TELEGRAM_BOT_TOKEN (токен бота від @BotFather) і TELEGRAM_CHAT_ID (ID групи) у Vercel.
+        </p>
+        <div className="mt-3">
+          <SendDigestButton />
+        </div>
+      </section>
+
+      <section id="plan" className="card p-5">
+        <div className="label">План на місяць</div>
+        <p className="mt-1 text-[12px] text-faint">
+          Ціль по регіону на місяць: бюджет у валюті регіону, ліди (без спаму), якісні ліди, угоди. На Огляді видно прогрес і прогноз на кінець
+          місяця. Порожні поля — без цілі.
+        </p>
+        {plan.length > 0 && (
+          <table className="data mt-3">
+            <thead>
+              <tr>
+                <th>Місяць</th>
+                <th>Регіон</th>
+                <th className="num">Бюджет</th>
+                <th className="num">Ліди</th>
+                <th className="num">Якісні</th>
+                <th className="num">Угоди</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {plan.map((t) => {
+                const reg = regions.find((r) => r.code === t.regionCode);
+                return (
+                  <tr key={t.month + t.regionCode}>
+                    <td>{t.month.slice(0, 7)}</td>
+                    <td>{reg?.name ?? t.regionCode}</td>
+                    <td className="num">{t.budget ? fmtMoney(Number(t.budget), reg?.currency ?? "") : "—"}</td>
+                    <td className="num">{t.leads !== null ? fmtInt(t.leads) : "—"}</td>
+                    <td className="num">{t.qualified !== null ? fmtInt(t.qualified) : "—"}</td>
+                    <td className="num">{t.deals !== null ? fmtInt(t.deals) : "—"}</td>
+                    <td>
+                      <DeleteTarget month={t.month} region={t.regionCode} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <div className="mt-3">
+          <TargetForm regions={regions.map((r) => ({ code: r.code, name: r.name, currency: r.currency }))} defaultMonth={monthBounds().from.slice(0, 7)} />
         </div>
       </section>
 

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runSync, type SyncKind } from "@/lib/sync";
+import { sendDigest } from "@/lib/digest";
+import { telegramEnabled } from "@/lib/telegram";
 
 export const maxDuration = 300;
 
@@ -16,5 +18,13 @@ export async function GET(request: NextRequest) {
   if (!["quick", "daily", "backfill"].includes(kind)) return NextResponse.json({ error: "bad kind" }, { status: 400 });
   const months = Number(request.nextUrl.searchParams.get("months") ?? "12");
   const report = await runSync(kind, { months });
-  return NextResponse.json({ kind, report });
+  // Morning Telegram summary after the daily sync (07:00 Dubai), when the bot is configured.
+  let digest: string | null = null;
+  if (kind === "daily" && telegramEnabled()) {
+    digest = await sendDigest().then(
+      () => "sent",
+      (e) => `failed: ${e instanceof Error ? e.message : e}`,
+    );
+  }
+  return NextResponse.json({ kind, report, digest });
 }

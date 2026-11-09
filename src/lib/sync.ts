@@ -1,4 +1,5 @@
 import "server-only";
+import { daysAgo } from "@/lib/dates";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, regions, syncRuns } from "@/db/schema";
@@ -14,7 +15,7 @@ export const sheetsEnabled = () => !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BAS
 
 export type SyncKind = "quick" | "daily" | "backfill";
 
-const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+const day = (offset: number) => daysAgo(offset);
 
 /** Idempotent first-run setup: regions and the known lead spreadsheets. */
 export async function ensureSeed() {
@@ -109,4 +110,53 @@ export async function lastSync(kind?: SyncKind) {
 /** True when the last quick sync is missing or older than `minutes`. */
 export function isStale(run: { startedAt: Date } | null, minutes = 10) {
   return !run || Date.now() - run.startedAt.getTime() > minutes * 60_000;
+}
+
+/** Last finished run without errors: the moment the numbers on screen are current as of. */
+export async function lastOkSync() {
+  const [r] = await db.select().from(syncRuns).where(eq(syncRuns.ok, true)).orderBy(desc(syncRuns.startedAt)).limit(1);
+  return r ?? null;
+}
+
+const STEP_LABEL: Record<string, string> = {
+  structure: "Кампанії й креативи",
+  insights: "Статистика реклами",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  metaLeads: "Ліди з Meta",
+  competitors: "Конкуренти",
+  sheets: "Google Таблиці",
+};
+
+/** Turns a raw API error into a sentence the team can act on. */
+export function explainError(message: string) {
+  if (/META_SYSTEM_USER_TOKEN is not set/.test(message)) return "немає токена Meta — додайте META_SYSTEM_USER_TOKEN у Vercel і зробіть Redeploy";
+  if (/session has expired|invalid oauth|error validating access token|code 190/i.test(message)) return "токен Meta недійсний або прострочений — згенеруйте новий";
+  if (/permission|not authorized|requires.*(permission|scope)/i.test(message)) return `токену Meta бракує доступу: ${message}`;
+  if (/rate limit|too many calls|request limit/i.test(message)) return "Meta тимчасово обмежила кількість запитів — спробує ще раз пізніше";
+  return message;
+}
+
+/** Steps of a run that failed, in plain words. */
+export function runProblems(run: { ok: boolean | null; message: string | null } | null): { step: string; error: string }[] {
+  if (!run || run.ok !== false || !run.message) return [];
+  let report: Record<string, unknown>;
+  try {
+    report = JSON.parse(run.message);
+  } catch {
+    return [{ step: "Оновлення", error: run.message }];
+  }
+  const out: { step: string; error: string }[] = [];
+  const visit = (step: string, v: unknown) => {
+    if (v && typeof v === "object") {
+      const err = (v as { error?: unknown }).error;
+      if (typeof err === "string") out.push({ step: STEP_LABEL[step] ?? step, error: explainError(err) });
+      else if (Array.isArray(v)) v.forEach((x) => visit(step, x));
+      else Object.entries(v as Record<string, unknown>).forEach(([, x]) => x && typeof x === "object" && visit(step, x));
+    } else if (typeof v === "string" && v.startsWith("error: ")) out.push({ step: `${STEP_LABEL[step] ?? step}`, error: explainError(v.slice(7)) });
+  };
+  for (const [k, v] of Object.entries(report)) visit(k, v);
+  // Same cause in every step (e.g. no token): say it once.
+  const seen = new Set<string>();
+  return out.filter((p) => (seen.has(p.error) ? false : (seen.add(p.error), true)));
 }

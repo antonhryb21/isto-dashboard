@@ -1,7 +1,9 @@
 import "server-only";
-import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { accountSnapshots, adInsightsDaily, campaigns } from "@/db/schema";
+import { accountSnapshots, adInsightsDaily, campaigns, leads, regions } from "@/db/schema";
+import { APP_TIMEZONE } from "@/lib/dates";
+import { QUALIFIED } from "@/lib/statuses";
 import { META } from "@/lib/config";
 
 export type Grain = "day" | "week" | "month" | "year";
@@ -26,6 +28,12 @@ export type ReportCell = {
   postShares: number;
   newFollowers: number | null; // null = no follower data for this period
   followerSpend: number; // spend on the days that have follower data, for an honest cost per follower
+  // From the CRM: leads created in the period and how far they got.
+  crmLeads: number; // without spam / supplier / not relevant
+  qualified: number;
+  meetings: number;
+  won: number;
+  revenue: number; // won deals in the report currency (or without a currency)
 };
 
 const DAY = 86_400_000;
@@ -153,6 +161,11 @@ export async function reportData(
     postShares: 0,
     newFollowers: null,
     followerSpend: 0,
+    crmLeads: 0,
+    qualified: 0,
+    meetings: 0,
+    won: 0,
+    revenue: 0,
   });
   const cells: Record<string, ReportCell> = Object.fromEntries(cols.map((c) => [c.key, empty()]));
   if (!cols.length) return { cells, total: empty() };
@@ -219,6 +232,42 @@ export async function reportData(
   for (const r of fol) {
     const c = cells[r.b];
     if (c && num(r.days) > 0) c.newFollowers = num(r.n);
+  }
+
+  // CRM: leads bucketed by creation day in the app timezone; narrowed to the region, or to the regions of the report currency.
+  const lw: SQL[] = [
+    gte(leads.createdTime, new Date(Date.parse(from + "T00:00:00Z") - 86_400_000)),
+    lte(leads.createdTime, new Date(Date.parse(to + "T23:59:59Z") + 86_400_000)),
+  ];
+  if (opts.region) lw.push(eq(leads.regionCode, opts.region));
+  else if (opts.currency) {
+    const regs = await db.select({ code: regions.code }).from(regions).where(eq(regions.currency, opts.currency));
+    const all = await db.select({ code: regions.code, currency: regions.currency }).from(regions);
+    // Only narrow when regions really differ in currency.
+    if (new Set(all.map((r) => r.currency)).size > 1) lw.push(regs.length ? inArray(leads.regionCode, regs.map((r) => r.code)) : sql`false`);
+  }
+  const localDay = sql`(${leads.createdTime} at time zone ${APP_TIMEZONE})::date`;
+  const lb = sql<string>`to_char(date_trunc(${sql.raw(`'${grain}'`)}, ${localDay}), 'YYYY-MM-DD')`;
+  const crm = await db
+    .select({
+      b: lb,
+      leads: sql<string>`count(*) filter (where ${leads.status} not in ('spam','supplier','not_relevant'))`,
+      qualified: sql<string>`count(*) filter (where ${inArray(leads.status, QUALIFIED)})`,
+      meetings: sql<string>`count(*) filter (where ${inArray(leads.status, ["meeting", "proposal", "won"])})`,
+      won: sql<string>`count(*) filter (where ${leads.status} = 'won')`,
+      revenue: sql<string>`coalesce(sum(${leads.dealAmount}) filter (where ${leads.status} = 'won' and (${leads.dealCurrency} is null or ${leads.dealCurrency} = ${opts.currency ?? ""} or ${opts.currency ?? ""} = '')), 0)`,
+    })
+    .from(leads)
+    .where(and(...lw, sql`${localDay} between ${from}::date and ${to}::date`))
+    .groupBy(sql`1`); // positional: the bucket expression carries bound parameters
+  for (const r of crm) {
+    const c = cells[r.b];
+    if (!c) continue;
+    c.crmLeads = num(r.leads);
+    c.qualified = num(r.qualified);
+    c.meetings = num(r.meetings);
+    c.won = num(r.won);
+    c.revenue = num(r.revenue);
   }
 
   const total = empty();

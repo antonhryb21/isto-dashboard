@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
-import { funnel } from "@/lib/queries";
+import { funnel, withCurrency } from "@/lib/queries";
 import { fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { SectionTitle } from "@/components/kpi";
@@ -9,7 +9,7 @@ import { SectionTitle } from "@/components/kpi";
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function FunnelPage({ searchParams }: { searchParams: SP }) {
-  const f = parseFilters(await searchParams);
+  const { f, currencies } = await withCurrency(parseFilters(await searchParams));
   const [regions, data] = await Promise.all([listRegions(), funnel(f)]);
   const s = data.stages;
   const max = Math.max(...s.map((x) => x.value), 1);
@@ -23,7 +23,7 @@ export default async function FunnelPage({ searchParams }: { searchParams: SP })
         sub="Від показу реклами до угоди. Етапи CRM рахують ліди, створені в обраний період, за найдальшим статусом, якого вони досягли."
       />
       <Suspense>
-        <FilterBar regions={regions.map((r) => ({ value: r.code, label: r.name }))} />
+        <FilterBar currencies={currencies} currency={f.currency} regions={regions.map((r) => ({ value: r.code, label: r.name }))} />
       </Suspense>
 
       <div className="card p-5 text-[14px] leading-relaxed">

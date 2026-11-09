@@ -3,9 +3,11 @@ import Link from "next/link";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
-import { leadList, owners, responseSpeed, statusCounts } from "@/lib/queries";
+import { leadList, overdueLeads, ownerSpeed, owners, responseSpeed, statusCounts } from "@/lib/queries";
+import { SLA_MINUTES } from "@/lib/config";
+import { minutesSince } from "@/lib/dates";
 import { STATUSES } from "@/lib/statuses";
-import { fmtDate, fmtInt, fmtMinutes } from "@/lib/format";
+import { fmtDate, fmtInt, fmtMinutes, fmtPct, plural } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
 import { StatusBadge, StatusSelect } from "@/components/crm-controls";
@@ -22,14 +24,18 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
   const view = sp.view === "board" ? "board" : "list";
   const status = typeof sp.status === "string" ? sp.status : null;
   const owner = typeof sp.owner === "string" ? sp.owner : null;
+  const overdueOnly = sp.overdue === "1";
 
-  const [regions, list, counts, speed, ownerList] = await Promise.all([
+  const [regions, list, counts, speed, ownerList, overdue, byOwner] = await Promise.all([
     listRegions(),
-    leadList(f, { status: view === "list" ? status : null, owner }),
+    leadList(f, { status: view === "list" && !overdueOnly ? status : null, owner, overdue: overdueOnly }),
     statusCounts(f),
     responseSpeed(f),
     owners(),
+    overdueLeads(f.region),
+    ownerSpeed(f),
   ]);
+  const waitedMin = minutesSince;
   const regionName = Object.fromEntries(regions.map((r) => [r.code, r.name]));
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const qs = (patch: Record<string, string | null>) => {
@@ -63,10 +69,32 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Лідів за період" value={fmtInt(total)} />
-        <Kpi label="Чекають контакту" value={fmtInt(counts.new ?? 0)} hint="статус New" accent={(counts.new ?? 0) > 0} />
+        <Kpi
+          label="Чекають контакту"
+          value={fmtInt(counts.new ?? 0)}
+          hint={overdue.length ? `${overdue.length} довше ${SLA_MINUTES} хв` : "статус New"}
+          accent={(counts.new ?? 0) > 0}
+        />
         <Kpi label="Медіана реакції" value={fmtMinutes(speed.medianMinutes)} hint={`виміряно для ${speed.measured}`} />
         <Kpi label="Угоди" value={fmtInt(counts.won ?? 0)} />
       </div>
+
+      {overdue.length > 0 && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 border-bad/50 p-4">
+          <div className="text-sm">
+            <span className="font-medium text-bad">
+              {overdue.length} {plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше {SLA_MINUTES} хв.
+            </span>{" "}
+            <span className="text-muted">
+              Найдовше — {fmtMinutes(waitedMin(overdue[0].createdTime))}
+              {overdue[0].fullName ? ` (${overdue[0].fullName})` : ""}.
+            </span>
+          </div>
+          <Link className="btn" href={overdueOnly ? qs({ overdue: null }) : qs({ overdue: "1", view: null, status: null })}>
+            {overdueOnly ? "Показати всі" : "Показати прострочені"}
+          </Link>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-1">
         {view === "list" && (
@@ -114,7 +142,12 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
             <tbody>
               {list.map((l) => (
                 <tr key={l.id}>
-                  <td className="whitespace-nowrap text-muted">{fmtDate(l.createdTime, true)}</td>
+                  <td className="whitespace-nowrap text-muted">
+                    {fmtDate(l.createdTime, true)}
+                    {l.status === "new" && waitedMin(l.createdTime) > SLA_MINUTES && waitedMin(l.createdTime) < 7 * 1440 && (
+                      <div className="text-[11px] font-medium text-bad">чекає {fmtMinutes(waitedMin(l.createdTime))}</div>
+                    )}
+                  </td>
                   <td>
                     <Link href={`/crm/${l.id}`} className="font-medium hover:text-accent">
                       {l.fullName || l.email || l.phone || "Без імені"}
@@ -167,6 +200,38 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {byOwner.some((o) => o.owner) && (
+        <div className="card overflow-x-auto">
+          <div className="label px-5 pt-4">Швидкість реакції по відповідальних</div>
+          <table className="data mt-2">
+            <thead>
+              <tr>
+                <th>Відповідальний</th>
+                <th className="num">Лідів</th>
+                <th className="num">Звʼязались</th>
+                <th className="num">Медіана реакції</th>
+                <th className="num">Вчасно (≤ {SLA_MINUTES} хв)</th>
+                <th className="num">Чекають</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byOwner.map((o) => (
+                <tr key={o.owner ?? "-"}>
+                  <td>{o.owner ?? <span className="text-faint">не призначено</span>}</td>
+                  <td className="num">{fmtInt(o.total)}</td>
+                  <td className="num">{fmtInt(o.contacted)}</td>
+                  <td className="num">{fmtMinutes(o.medianMinutes)}</td>
+                  <td className="num">
+                    {o.slaShare === null ? "—" : <span className={o.slaShare >= 0.8 ? "text-good" : o.slaShare < 0.5 ? "text-bad" : ""}>{fmtPct(o.slaShare, 0)}</span>}
+                  </td>
+                  <td className={`num ${o.waiting ? "text-bad" : ""}`}>{fmtInt(o.waiting)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

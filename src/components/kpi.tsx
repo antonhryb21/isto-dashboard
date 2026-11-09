@@ -13,6 +13,7 @@ export function Kpi({
   hint,
   goodWhenDown = false,
   accent = false,
+  empty = false,
 }: {
   label: string;
   value: string;
@@ -21,13 +22,15 @@ export function Kpi({
   hint?: string;
   goodWhenDown?: boolean;
   accent?: boolean;
+  /** No data to compute this from (e.g. no ads data yet): shows "—" instead of a misleading 0. */
+  empty?: boolean;
 }) {
-  const d = current !== undefined && previous !== undefined ? delta(current, previous) : undefined;
+  const d = !empty && current !== undefined && previous !== undefined ? delta(current, previous) : undefined;
   const good = d === null || d === undefined ? null : goodWhenDown ? d < 0 : d > 0;
   return (
     <div className={`card p-5 ${accent ? "border-accent" : ""}`}>
       <div className="label">{label}</div>
-      <div className="metric mt-3 text-[30px]">{value}</div>
+      <div className={`metric mt-3 text-[30px] ${empty ? "text-faint" : ""}`}>{empty ? "—" : value}</div>
       <div className="mt-3 flex items-center gap-2 text-[12px]">
         {d !== undefined && (
           <span className={d === null || d === 0 ? "text-faint" : good ? "text-good" : "text-bad"}>

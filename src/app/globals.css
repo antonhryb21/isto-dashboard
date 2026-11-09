@@ -224,6 +224,9 @@ table.report .sticky-col {
   font-weight: 500;
   white-space: nowrap;
 }
+table.report tr.band-crm td {
+  background: color-mix(in oklab, var(--oak) 16%, var(--panel));
+}
 table.report tr.band-social td {
   background: color-mix(in oklab, var(--steel) 22%, var(--panel));
 }

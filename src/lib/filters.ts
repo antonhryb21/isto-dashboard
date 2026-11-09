@@ -1,3 +1,5 @@
+import { localDate } from "@/lib/dates";
+
 export type Filters = {
   from: string; // YYYY-MM-DD inclusive
   to: string;
@@ -9,6 +11,10 @@ export type Filters = {
   campaign: string | null;
   type: string | null; // post | reel | carousel | video
   q: string | null;
+  /** Ad account currency in effect. Set when several currencies exist and no region narrows it: spend is never summed across currencies. */
+  currency: string | null;
+  /** Regions using `currency` (leads are narrowed to them so CPL compares like with like). */
+  currencyRegions: string[] | null;
 };
 
 type SP = Record<string, string | string[] | undefined>;
@@ -37,7 +43,7 @@ export function parseFilters(sp: SP): Filters {
     const s = Array.isArray(v) ? v[0] : v;
     return s && s.trim() ? s.trim() : null;
   };
-  const today = iso(new Date());
+  const today = localDate();
   let preset = one("p") ?? "30d";
   let from: string;
   let to = today;
@@ -83,6 +89,8 @@ export function parseFilters(sp: SP): Filters {
     campaign: one("campaign"),
     type: one("type"),
     q: one("q"),
+    currency: one("cur"),
+    currencyRegions: null,
   };
 }
 

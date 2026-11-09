@@ -1,4 +1,5 @@
 import "server-only";
+import { localDate } from "@/lib/dates";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitorPosts, competitorSnapshots, competitors } from "@/db/schema";
@@ -59,7 +60,7 @@ async function discover(username: string, after?: string) {
   return query(MEDIA_FIELDS);
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDate();
 
 /**
  * Public Instagram data of every tracked account via Business Discovery (works for business and creator accounts).

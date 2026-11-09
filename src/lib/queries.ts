@@ -1,8 +1,9 @@
 import "server-only";
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, socialPosts } from "@/db/schema";
+import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts } from "@/db/schema";
 import type { Filters } from "@/lib/filters";
+import { SLA_LOOKBACK_DAYS, SLA_MINUTES } from "@/lib/config";
 import { QUALIFIED, funnelDepth, type StatusCode } from "@/lib/statuses";
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
@@ -10,8 +11,27 @@ const JUNK: StatusCode[] = ["spam", "supplier", "not_relevant"];
 
 // ---------- Ads ----------
 
+/**
+ * Spend in different currencies is never added up. With no region chosen and several ad account currencies,
+ * the page shows one currency at a time (`?cur=`, default: the one with most spend), and leads are narrowed to
+ * the regions in that currency. Returns the filters to use plus the currencies for the switch.
+ */
+export async function withCurrency(f: Filters): Promise<{ f: Filters; currencies: string[] }> {
+  const rows = await db
+    .select({ currency: adInsightsDaily.currency })
+    .from(adInsightsDaily)
+    .groupBy(adInsightsDaily.currency)
+    .orderBy(desc(sql`sum(${adInsightsDaily.spend})`));
+  const currencies = rows.map((r) => r.currency).filter(Boolean) as string[];
+  if (f.region || currencies.length < 2) return { f: { ...f, currency: null, currencyRegions: null }, currencies: [] };
+  const currency = f.currency && currencies.includes(f.currency) ? f.currency : currencies[0];
+  const regs = await db.select({ code: regions.code }).from(regions).where(eq(regions.currency, currency));
+  return { f: { ...f, currency, currencyRegions: regs.map((r) => r.code) }, currencies };
+}
+
 function adWhere(f: Filters, from: string, to: string): SQL[] {
   const w: SQL[] = [gte(adInsightsDaily.date, from), lte(adInsightsDaily.date, to)];
+  if (f.currency) w.push(eq(adInsightsDaily.currency, f.currency));
   if (f.region) w.push(eq(campaigns.regionCode, f.region));
   if (f.campaign) w.push(eq(adInsightsDaily.campaignId, f.campaign));
   return w;
@@ -78,7 +98,35 @@ async function crmBy(key: "campaign" | "ad", f: Filters) {
     .from(leads)
     .where(and(...leadWhere(f, f.from, f.to)))
     .groupBy(col);
-  return new Map(rows.filter((r) => r.id).map((r) => [r.id!, { total: num(r.total), qualified: num(r.qualified), won: num(r.won), revenue: num(r.revenue) }]));
+  // Deal amounts by currency: ROMI is only computed against spend in the same currency
+  // (a deal without a currency is taken to be in the campaign's currency).
+  const rev = await db
+    .select({ id: col, cur: sql<string>`coalesce(${leads.dealCurrency}, '')`, amount: sql<string>`sum(${leads.dealAmount})` })
+    .from(leads)
+    .where(and(...leadWhere(f, f.from, f.to), eq(leads.status, "won")))
+    .groupBy(col, sql`2`);
+  const byCur = new Map<string, Record<string, number>>();
+  for (const r of rev) {
+    if (!r.id) continue;
+    const m = byCur.get(r.id) ?? {};
+    m[r.cur] = (m[r.cur] ?? 0) + num(r.amount);
+    byCur.set(r.id, m);
+  }
+  return new Map(
+    rows
+      .filter((r) => r.id)
+      .map((r) => [r.id!, { total: num(r.total), qualified: num(r.qualified), won: num(r.won), revenue: num(r.revenue), revenueByCurrency: byCur.get(r.id!) ?? {} }]),
+  );
+}
+
+type CrmAgg = { total: number; qualified: number; won: number; revenue: number; revenueByCurrency: Record<string, number> };
+const EMPTY_CRM: CrmAgg = { total: 0, qualified: 0, won: 0, revenue: 0, revenueByCurrency: {} };
+
+/** Revenue comparable with spend (same currency or no currency set) and ROMI = (revenue − spend) ÷ spend. */
+export function romiFor(spend: number, currency: string, byCurrency: Record<string, number>) {
+  const revenue = (byCurrency[currency] ?? 0) + (byCurrency[""] ?? 0);
+  const otherCurrency = Object.keys(byCurrency).some((c) => c && c !== currency);
+  return { revenue, otherCurrency, romi: revenue && spend ? (revenue - spend) / spend : null };
 }
 
 export async function campaignTable(f: Filters) {
@@ -92,6 +140,7 @@ export async function campaignTable(f: Filters) {
       impressions: sql<string>`sum(${adInsightsDaily.impressions})`,
       linkClicks: sql<string>`sum(${adInsightsDaily.linkClicks})`,
       leads: sql<string>`sum(${adInsightsDaily.leads})`,
+      currency: sql<string>`max(${adInsightsDaily.currency})`,
     })
     .from(adInsightsDaily)
     .leftJoin(campaigns, eq(campaigns.id, adInsightsDaily.campaignId))
@@ -101,8 +150,10 @@ export async function campaignTable(f: Filters) {
   const crm = await crmBy("campaign", f);
   return rows.map((r) => {
     const spend = num(r.spend);
-    const c = crm.get(r.id ?? "") ?? { total: 0, qualified: 0, won: 0, revenue: 0 };
+    const c = crm.get(r.id ?? "") ?? EMPTY_CRM;
     return {
+      ...romiFor(spend, r.currency ?? "AED", c.revenueByCurrency),
+      currency: r.currency ?? "AED",
       id: r.id,
       name: r.name ?? r.id ?? "—",
       region: r.region,
@@ -127,6 +178,7 @@ export async function creativeTable(f: Filters) {
       impressions: sql<string>`sum(${adInsightsDaily.impressions})`,
       linkClicks: sql<string>`sum(${adInsightsDaily.linkClicks})`,
       leads: sql<string>`sum(${adInsightsDaily.leads})`,
+      currency: sql<string>`max(${adInsightsDaily.currency})`,
     })
     .from(adInsightsDaily)
     .leftJoin(campaigns, eq(campaigns.id, adInsightsDaily.campaignId))
@@ -149,8 +201,10 @@ export async function creativeTable(f: Filters) {
       const impressions = num(r.impressions);
       const linkClicks = num(r.linkClicks);
       const metaLeads = num(r.leads);
-      const c = crm.get(r.adId) ?? { total: 0, qualified: 0, won: 0, revenue: 0 };
+      const c = crm.get(r.adId) ?? EMPTY_CRM;
       return {
+        ...romiFor(spend, r.currency ?? "AED", c.revenueByCurrency),
+        currency: r.currency ?? "AED",
         id: r.adId,
         name: m?.ad.name ?? r.adId,
         campaignName: m?.campaignName ?? null,
@@ -186,6 +240,7 @@ export function leadWhere(f: Filters, from: string, to: string): SQL[] {
     lte(leads.createdTime, new Date(to + "T23:59:59Z")),
   ];
   if (f.region) w.push(eq(leads.regionCode, f.region));
+  else if (f.currencyRegions) w.push(f.currencyRegions.length ? inArray(leads.regionCode, f.currencyRegions) : sql`false`);
   if (f.platform) w.push(eq(leads.platform, f.platform));
   if (f.campaign) w.push(eq(leads.campaignId, f.campaign));
   return w;
@@ -204,7 +259,13 @@ export async function crmTotals(f: Filters, from = f.from, to = f.to) {
     })
     .from(leads)
     .where(and(...leadWhere(f, from, to)));
+  const rev = await db
+    .select({ cur: sql<string>`coalesce(${leads.dealCurrency}, '')`, amount: sql<string>`sum(${leads.dealAmount})` })
+    .from(leads)
+    .where(and(...leadWhere(f, from, to), eq(leads.status, "won")))
+    .groupBy(sql`1`);
   return {
+    revenueByCurrency: Object.fromEntries(rev.map((x) => [x.cur, num(x.amount)])) as Record<string, number>,
     total: num(r?.total),
     junk: num(r?.junk),
     qualified: num(r?.qualified),
@@ -229,8 +290,8 @@ export async function leadsDaily(f: Filters) {
   return rows.map((r) => ({ date: r.date, total: num(r.total), qualified: num(r.qualified) }));
 }
 
-export async function leadList(f: Filters, opts: { status?: string | null; owner?: string | null; limit?: number } = {}) {
-  const w = leadWhere(f, f.from, f.to);
+export async function leadList(f: Filters, opts: { status?: string | null; owner?: string | null; overdue?: boolean; limit?: number } = {}) {
+  const w = opts.overdue ? [...overdueWhere(), ...(f.region ? [eq(leads.regionCode, f.region)] : [])] : leadWhere(f, f.from, f.to);
   if (opts.status) w.push(eq(leads.status, opts.status));
   if (opts.owner) w.push(eq(leads.owner, opts.owner));
   if (f.q) {
@@ -370,4 +431,89 @@ export async function followers() {
     .limit(60);
   const latest = (p: string) => rows.find((r) => r.platform === p) ?? null;
   return { ig: latest("ig"), fb: latest("fb") };
+}
+
+/** Leads waiting in "New" longer than the response target (any period, last week only). */
+export function overdueWhere(): SQL[] {
+  return [
+    eq(leads.status, "new"),
+    lte(leads.createdTime, new Date(Date.now() - SLA_MINUTES * 60_000)),
+    gte(leads.createdTime, new Date(Date.now() - SLA_LOOKBACK_DAYS * 86_400_000)),
+  ];
+}
+
+export async function overdueLeads(region?: string | null) {
+  const w = overdueWhere();
+  if (region) w.push(eq(leads.regionCode, region));
+  return db
+    .select({ id: leads.id, fullName: leads.fullName, phone: leads.phone, createdTime: leads.createdTime, regionCode: leads.regionCode, owner: leads.owner })
+    .from(leads)
+    .where(and(...w))
+    .orderBy(asc(leads.createdTime));
+}
+
+/** Response speed per owner for leads created in the period. */
+export async function ownerSpeed(f: Filters) {
+  const rows = await db
+    .select({
+      owner: sql<string>`coalesce(${leads.owner}, '')`,
+      total: sql<string>`count(*)`,
+      contacted: sql<string>`count(${leads.firstContactAt})`,
+      median: sql<string | null>`percentile_cont(0.5) within group (order by extract(epoch from (${leads.firstContactAt} - ${leads.createdTime})) / 60)`,
+      inSla: sql<string>`count(*) filter (where ${leads.firstContactAt} - ${leads.createdTime} <= make_interval(mins => ${SLA_MINUTES}))`,
+      waiting: sql<string>`count(*) filter (where ${leads.status} = 'new')`,
+    })
+    .from(leads)
+    .where(and(...leadWhere(f, f.from, f.to)))
+    .groupBy(sql`1`)
+    .orderBy(desc(sql`count(*)`));
+  return rows.map((r) => ({
+    owner: r.owner || null,
+    total: num(r.total),
+    contacted: num(r.contacted),
+    medianMinutes: r.median === null ? null : num(r.median),
+    slaShare: num(r.contacted) ? num(r.inSla) / num(r.contacted) : null,
+    waiting: num(r.waiting),
+  }));
+}
+
+/**
+ * Creative fatigue, judged at the end of the period: link CTR of the last 7 days vs the 7 days before,
+ * daily frequency (impressions ÷ reach, averaged per day) and how long the ad has been running.
+ * "Tired" = running 14+ days, enough impressions to judge, CTR down 30%+ week over week.
+ */
+export async function creativeFatigue(to: string) {
+  const d = (n: number) => new Date(Date.parse(to + "T00:00:00Z") - n * 86_400_000).toISOString().slice(0, 10);
+  const [recent, life] = await Promise.all([
+    db
+      .select({
+        adId: adInsightsDaily.adId,
+        impr7: sql<string>`sum(${adInsightsDaily.impressions}) filter (where ${adInsightsDaily.date} > ${d(7)})`,
+        clicks7: sql<string>`sum(${adInsightsDaily.linkClicks}) filter (where ${adInsightsDaily.date} > ${d(7)})`,
+        reach7: sql<string>`sum(${adInsightsDaily.reach}) filter (where ${adInsightsDaily.date} > ${d(7)})`,
+        imprPrev: sql<string>`sum(${adInsightsDaily.impressions}) filter (where ${adInsightsDaily.date} <= ${d(7)})`,
+        clicksPrev: sql<string>`sum(${adInsightsDaily.linkClicks}) filter (where ${adInsightsDaily.date} <= ${d(7)})`,
+      })
+      .from(adInsightsDaily)
+      .where(and(gte(adInsightsDaily.date, d(13)), lte(adInsightsDaily.date, to)))
+      .groupBy(adInsightsDaily.adId),
+    db
+      .select({ adId: adInsightsDaily.adId, first: sql<string>`min(${adInsightsDaily.date})` })
+      .from(adInsightsDaily)
+      .where(sql`${adInsightsDaily.impressions} > 0`)
+      .groupBy(adInsightsDaily.adId),
+  ]);
+  const firstDay = new Map(life.map((r) => [r.adId, String(r.first)]));
+  return new Map(
+    recent.map((r) => {
+      const ctr7 = num(r.impr7) ? num(r.clicks7) / num(r.impr7) : null;
+      const ctrPrev = num(r.imprPrev) ? num(r.clicksPrev) / num(r.imprPrev) : null;
+      const change = ctr7 !== null && ctrPrev ? (ctr7 - ctrPrev) / ctrPrev : null;
+      const first = firstDay.get(r.adId);
+      const daysRunning = first ? Math.round((Date.parse(to) - Date.parse(first)) / 86_400_000) + 1 : 0;
+      const frequency = num(r.reach7) ? num(r.impr7) / num(r.reach7) : null;
+      const tired = daysRunning >= 14 && num(r.impr7) >= 2000 && change !== null && change <= -0.3;
+      return [r.adId, { ctr7, ctrChange: change, frequency, daysRunning, tired }];
+    }),
+  );
 }

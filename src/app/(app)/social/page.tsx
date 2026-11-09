@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { Bookmark, Eye, Heart, MessageCircle, Play, Send, Zap } from "lucide-react";
 import { parseFilters } from "@/lib/filters";
-import { listRegions } from "@/lib/regions";
 import { followers, socialList, socialTotals } from "@/lib/queries";
 import { fmtCompact, fmtDate, fmtInt } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
@@ -13,8 +12,7 @@ const TYPE_LABEL: Record<string, string> = { post: "Пост", carousel: "Кар
 
 export default async function SocialPage({ searchParams }: { searchParams: SP }) {
   const f = parseFilters(await searchParams);
-  const [regions, posts, t, tPrev, fol] = await Promise.all([
-    listRegions(),
+  const [posts, t, tPrev, fol] = await Promise.all([
     socialList(f),
     socialTotals(f),
     socialTotals(f, f.prevFrom, f.prevTo),
@@ -25,7 +23,7 @@ export default async function SocialPage({ searchParams }: { searchParams: SP })
     <div className="flex flex-col gap-6">
       <SectionTitle title="Соцмережі" sub="Пости Instagram і Facebook ISTO з охопленням і реакціями. ⚡ — пост просувався рекламою." />
       <Suspense>
-        <FilterBar regions={regions.map((r) => ({ value: r.code, label: r.name }))} showType showSearch searchPlaceholder="Текст поста" />
+        <FilterBar regions={[]} showRegion={false} showType showSearch searchPlaceholder="Текст поста" />
       </Suspense>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">

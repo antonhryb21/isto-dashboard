@@ -292,3 +292,18 @@ export const competitorPosts = pgTable(
   },
   (t) => [index("competitor_posts_user_idx").on(t.username, t.publishedAt)],
 );
+
+/** Monthly plan per region (budget in the region's currency). Shown as pacing on the Overview. */
+export const targets = pgTable(
+  "targets",
+  {
+    month: date("month").notNull(), // first day of the month
+    regionCode: text("region_code").notNull(),
+    budget: numeric("budget", { precision: 14, scale: 2 }),
+    leads: integer("leads"),
+    qualified: integer("qualified"),
+    deals: integer("deals"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.month, t.regionCode] })],
+);

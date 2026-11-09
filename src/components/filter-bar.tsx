@@ -16,6 +16,8 @@ export function FilterBar({
   searchPlaceholder = "Пошук",
   showRegion = true,
   autoRange,
+  currencies = [],
+  currency = null,
 }: {
   regions: Option[];
   campaigns?: Option[];
@@ -27,6 +29,9 @@ export function FilterBar({
   showRegion?: boolean;
   /** Range a page shows when the URL picks no period (Reports); no preset is highlighted then. */
   autoRange?: { from: string; to: string };
+  /** Ad account currencies when there are several and no region is chosen; spend is shown per currency. */
+  currencies?: string[];
+  currency?: string | null;
 }) {
   const router = useRouter();
   const path = usePathname();
@@ -84,7 +89,7 @@ export function FilterBar({
         )}
       </div>
       {showRegion && (
-        <select className="input" value={sp.get("region") ?? ""} onChange={(e) => set({ region: e.target.value })}>
+        <select className="input" value={sp.get("region") ?? ""} onChange={(e) => set({ region: e.target.value, cur: null })}>
           <option value="">Усі регіони</option>
           {regions.map((r) => (
             <option key={r.value} value={r.value}>
@@ -118,6 +123,16 @@ export function FilterBar({
             </option>
           ))}
         </select>
+      )}
+      {currencies.length > 1 && (
+        <div className="flex items-center gap-1 text-[12px] text-faint" title="Рекламні кабінети в різних валютах не додаються між собою">
+          Валюта:
+          {currencies.map((c) => (
+            <button key={c} className="chip" data-active={currency === c} onClick={() => set({ cur: c })}>
+              {c}
+            </button>
+          ))}
+        </div>
       )}
       {showSearch && (
         <input

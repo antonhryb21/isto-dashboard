@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { competitors, leadSources, regions, users, type Role } from "@/db/schema";
+import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { addComment, setLeadFields } from "@/lib/leads";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
@@ -11,6 +11,7 @@ import { writeBackLead, discoverSources } from "@/lib/sheets/sync";
 import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 import { ensureSeed, runSync, type SyncKind } from "@/lib/sync";
 import { syncCompetitors } from "@/lib/meta/competitors";
+import { sendDigest } from "@/lib/digest";
 
 export type ActionResult = { ok: boolean; message?: string };
 
@@ -259,4 +260,51 @@ export async function removeCompetitorAction(username: string): Promise<ActionRe
   revalidatePath("/competitors");
   revalidatePath("/admin");
   return { ok: true };
+}
+
+// ---------- Monthly plan ----------
+
+export async function saveTargetAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {
+  await requireUser("admin");
+  const month = String(form.get("month") ?? "");
+  const regionCode = String(form.get("region") ?? "");
+  if (!/^\d{4}-\d{2}$/.test(month) || !regionCode) return { ok: false, message: "Оберіть місяць і регіон" };
+  const n = (k: string) => {
+    const v = String(form.get(k) ?? "").replace(/\s/g, "").replace(",", ".");
+    return v ? Number(v) : null;
+  };
+  const values = {
+    month: `${month}-01`,
+    regionCode,
+    budget: n("budget") === null ? null : String(n("budget")),
+    leads: n("leads"),
+    qualified: n("qualified"),
+    deals: n("deals"),
+    updatedAt: new Date(),
+  };
+  if ([values.budget, values.leads, values.qualified, values.deals].every((v) => v === null)) return { ok: false, message: "Вкажіть хоча б одну ціль" };
+  await db.insert(targets).values(values).onConflictDoUpdate({ target: [targets.month, targets.regionCode], set: values });
+  revalidatePath("/");
+  revalidatePath("/admin");
+  return { ok: true, message: "План збережено" };
+}
+
+export async function deleteTargetAction(month: string, regionCode: string): Promise<ActionResult> {
+  await requireUser("admin");
+  await db.delete(targets).where(and(eq(targets.month, month), eq(targets.regionCode, regionCode)));
+  revalidatePath("/");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+// ---------- Telegram ----------
+
+export async function sendDigestAction(): Promise<ActionResult> {
+  await requireUser("admin");
+  try {
+    await sendDigest();
+    return { ok: true, message: "Звіт надіслано в Telegram" };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+  }
 }

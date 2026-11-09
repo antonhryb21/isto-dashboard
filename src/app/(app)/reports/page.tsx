@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { localDate } from "@/lib/dates";
 import { Suspense } from "react";
 import { listRegions } from "@/lib/regions";
 import { hasPeriod, parseFilters } from "@/lib/filters";
@@ -12,7 +13,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 type Row = {
   label: string;
-  band: "ads" | "social" | "followers";
+  band: "ads" | "crm" | "social" | "followers";
   value: (c: ReportCell, cur: string) => string;
 };
 
@@ -28,6 +29,13 @@ const ROWS: Row[] = [
   { label: "CPM", band: "ads", value: (c, cur) => (ratio(c.spend, c.impressions) === null ? dash : fmtMoney((c.spend / c.impressions) * 1000, cur, 1)) },
   { label: "Ліди", band: "ads", value: (c) => fmtInt(c.leads) },
   { label: "CPL (ціна ліда)", band: "ads", value: (c, cur) => (c.leads ? fmtMoney(c.spend / c.leads, cur) : dash) },
+  { label: "Ліди в CRM (без спаму)", band: "crm", value: (c) => fmtInt(c.crmLeads) },
+  { label: "Якісні ліди", band: "crm", value: (c) => fmtInt(c.qualified) },
+  { label: "Ціна якісного ліда", band: "crm", value: (c, cur) => (c.qualified && c.spend ? fmtMoney(c.spend / c.qualified, cur) : dash) },
+  { label: "Зустрічі", band: "crm", value: (c) => fmtInt(c.meetings) },
+  { label: "Угоди", band: "crm", value: (c) => fmtInt(c.won) },
+  { label: "Виручка", band: "crm", value: (c, cur) => (c.revenue ? fmtMoney(c.revenue, cur) : dash) },
+  { label: "ROMI", band: "crm", value: (c) => (c.revenue && c.spend ? `${c.revenue > c.spend ? "+" : ""}${Math.round(((c.revenue - c.spend) / c.spend) * 100)}%` : dash) },
   { label: "Взаємодія зі сторінкою", band: "social", value: (c) => fmtInt(c.pageEngagement) },
   { label: "Реакції на пости", band: "social", value: (c) => fmtInt(c.postReactions) },
   { label: "Коментарі", band: "social", value: (c) => fmtInt(c.postComments) },
@@ -45,7 +53,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
   const sp = await searchParams;
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : null);
   const grain = (GRAINS.find((g) => g.key === one("g"))?.key ?? "month") as Grain;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   const thisYear = Number(today.slice(0, 4));
   const page = Math.max(0, Number(one("page") ?? 0) || 0);
   const region = one("region");
@@ -175,7 +183,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         <p>
           {regionName}
           {currencies.length > 1 ? ` · суми в ${cur}: рекламні кабінети в різних валютах не додаються між собою` : ""}. CPC і CTR рахуються від усіх
-          кліків, як у Ads Manager. Ліди — за даними Meta.
+          кліків, як у Ads Manager. «Ліди» — за даними Meta; блок CRM — ліди, створені в цьому періоді, і до якого етапу вони дійшли.
         </p>
         <p>
           Реакції, коментарі, збереження і поширення — взаємодія з рекламними дописами. Нові підписники Instagram — по всьому акаунту; Meta віддає їх лише

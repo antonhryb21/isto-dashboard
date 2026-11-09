@@ -2,18 +2,23 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
-import { adDaily, adTotals, campaignOptions, creativeTable, crmTotals, followers, leadsDaily, responseSpeed, socialTotals } from "@/lib/queries";
-import { fmtCompact, fmtInt, fmtMinutes, fmtMoney, fmtPct } from "@/lib/format";
+import { adDaily, adTotals, campaignOptions, creativeTable, crmTotals, followers, leadsDaily, socialTotals, romiFor, withCurrency } from "@/lib/queries";
+import { fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Kpi, SectionTitle } from "@/components/kpi";
 import { SpendLeadsChart } from "@/components/charts";
+import { lastOkSync } from "@/lib/sync";
+import { monthPacing } from "@/lib/targets";
+import { PacingCard } from "@/components/pacing";
+import { hasRole, requireUser } from "@/lib/auth/current-user";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function Overview({ searchParams }: { searchParams: SP }) {
-  const f = parseFilters(await searchParams);
-  const [regions, camps] = await Promise.all([listRegions(), campaignOptions()]);
-  const [ad, adPrev, crm, crmPrev, daily, leadDays, social, socialPrev, fol, speed, creatives] = await Promise.all([
+  const { f, currencies } = await withCurrency(parseFilters(await searchParams));
+  const [regions, camps, everSynced] = await Promise.all([listRegions(), campaignOptions(), lastOkSync()]);
+  const [user, plan] = await Promise.all([requireUser(), monthPacing(f)]);
+  const [ad, adPrev, crm, crmPrev, daily, leadDays, social, socialPrev, fol, creatives] = await Promise.all([
     adTotals(f),
     adTotals(f, f.prevFrom, f.prevTo),
     crmTotals(f),
@@ -23,11 +28,14 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     socialTotals(f),
     socialTotals(f, f.prevFrom, f.prevTo),
     followers(),
-    responseSpeed(f),
     creativeTable(f),
   ]);
 
   const cur = ad.currency;
+  // "0" only when there really were no results; "—" when there is nothing to compute from.
+  const noAds = ad.impressions === 0 && ad.spend === 0;
+  const money = romiFor(ad.spend, cur, crm.revenueByCurrency);
+  const moneyPrev = romiFor(adPrev.spend, cur, crmPrev.revenueByCurrency);
   const crmLeads = crm.total - crm.junk;
   const crmLeadsPrev = crmPrev.total - crmPrev.junk;
   const cplReal = crmLeads ? ad.spend / crmLeads : 0;
@@ -53,8 +61,14 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         title="Огляд"
         sub={`${f.from} — ${f.to} · порівняння з ${f.prevFrom} — ${f.prevTo}`}
       />
+      {!everSynced && noAds && (
+        <div className="card border-bad/40 p-4 text-sm text-muted">
+          <span className="font-medium text-text">Дані з Meta ще не завантажені.</span> Поки що порожні показники означають «немає даних», а не нуль
+          результатів. Після підключення токена Meta реклама, пости й ліди підтягнуться автоматично.
+        </div>
+      )}
       <Suspense>
-        <FilterBar
+        <FilterBar currencies={currencies} currency={f.currency}
           regions={regions.map((r) => ({ value: r.code, label: r.name }))}
           campaigns={camps.map((c) => ({ value: c.id, label: c.name }))}
           showCampaign
@@ -62,19 +76,37 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       </Suspense>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Витрати" value={fmtMoney(ad.spend, cur)} current={ad.spend} previous={adPrev.spend} />
+        <Kpi label="Витрати" value={fmtMoney(ad.spend, cur)} current={ad.spend} previous={adPrev.spend} empty={noAds} hint={noAds ? "немає даних реклами за період" : undefined} />
         <Kpi label="Ліди (без спаму)" value={fmtInt(crmLeads)} current={crmLeads} previous={crmLeadsPrev} hint={`${fmtInt(crm.total)} усього заявок`} />
-        <Kpi label="Ціна ліда" value={fmtMoney(cplReal, cur)} current={cplReal} previous={cplRealPrev} goodWhenDown hint={`за Meta: ${fmtMoney(ad.cpl, cur)}`} />
-        <Kpi label="Ціна якісного ліда" value={fmtMoney(costQualified, cur)} current={costQualified} previous={costQualifiedPrev} goodWhenDown accent hint={`${fmtInt(crm.qualified)} якісних`} />
+        <Kpi label="Ціна ліда" value={fmtMoney(cplReal, cur)} current={cplReal} previous={cplRealPrev} goodWhenDown empty={noAds || !crmLeads} hint={ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : undefined} />
+        <Kpi label="Ціна якісного ліда" value={fmtMoney(costQualified, cur)} current={costQualified} previous={costQualifiedPrev} goodWhenDown accent empty={noAds || !crm.qualified} hint={`${fmtInt(crm.qualified)} якісних`} />
         <Kpi label="Зустрічі" value={fmtInt(crm.meetings)} current={crm.meetings} previous={crmPrev.meetings} />
-        <Kpi label="Угоди" value={fmtInt(crm.won)} current={crm.won} previous={crmPrev.won} hint={crm.revenue ? fmtMoney(crm.revenue, cur) : undefined} />
-        <Kpi label="CTR · CPM" value={fmtPct(ad.ctr, 2)} current={ad.ctr} previous={adPrev.ctr} hint={`CPM ${fmtMoney(ad.cpm, cur, 1)}`} />
+        <Kpi label="Угоди" value={fmtInt(crm.won)} current={crm.won} previous={crmPrev.won} hint={money.revenue ? `виручка ${fmtMoney(money.revenue, cur)}` : undefined} />
+        <Kpi label="CTR · CPM" value={fmtPct(ad.ctr, 2)} current={ad.ctr} previous={adPrev.ctr} empty={noAds} hint={noAds ? undefined : `CPM ${fmtMoney(ad.cpm, cur, 1)}`} />
         <Kpi
-          label="Реакція на ліда"
-          value={fmtMinutes(speed.medianMinutes)}
-          hint={speed.waiting ? `${speed.waiting} чекають контакту` : "медіана до першого контакту"}
+          label="ROMI"
+          value={money.romi === null ? "—" : `${money.romi > 0 ? "+" : ""}${Math.round(money.romi * 100)}%`}
+          empty={money.romi === null}
+          hint={
+            money.romi === null
+              ? "зʼявиться з першою угодою із сумою"
+              : moneyPrev.romi !== null
+                ? `попередній період ${moneyPrev.romi > 0 ? "+" : ""}${Math.round(moneyPrev.romi * 100)}%`
+                : "(виручка − витрати) ÷ витрати"
+          }
         />
       </div>
+
+      {plan && plan.items.some((p) => p.key !== "budget" || !plan.mixedCurrency) && (
+        <PacingCard
+          month={plan.from}
+          elapsed={plan.elapsed}
+          daysInMonth={plan.daysInMonth}
+          currency={plan.currency}
+          items={plan.mixedCurrency ? plan.items.filter((p) => p.key !== "budget") : plan.items}
+          canEdit={hasRole(user.role, "admin")}
+        />
+      )}
 
       <div className="card p-5">
         <div className="flex items-baseline justify-between">
