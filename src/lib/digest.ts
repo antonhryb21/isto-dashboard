@@ -10,6 +10,7 @@ import { adTotals, crmTotals, overdueLeads, withCurrency } from "@/lib/queries";
 import { lastSync, runProblems } from "@/lib/sync";
 import { monthPacing } from "@/lib/targets";
 import { escapeHtml as e, sendTelegram } from "@/lib/telegram";
+import { latestInsights } from "@/lib/ai/insights";
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
 
@@ -98,6 +99,15 @@ export async function buildDigest(appUrl = process.env.APP_URL ?? "") {
   if (problems.length) alerts.push(`⚠️ Дані не оновились: ${e(problems[0].step)} — ${e(problems[0].error)}`);
 
   if (alerts.length) lines.push("", "<b>Увага</b>", ...alerts);
+
+  // Today's AI advice, if it was generated this morning.
+  const ai = await latestInsights();
+  if (ai && Date.now() - ai.createdAt.getTime() < 6 * 3600_000 && ai.summary) {
+    const icon = { critical: "🚨", warning: "⚠️", info: "ℹ️", good: "✅" } as const;
+    lines.push("", `<b>AI-аналіз</b> · ${ai.health ?? "—"}/100`, e(ai.summary));
+    for (const i of ai.insights.slice(0, 3)) lines.push(`${icon[i.severity] ?? "•"} ${e(i.title)} — <i>${e(i.action)}</i>`);
+    if (appUrl) lines.push(`<a href="${e(appUrl)}/insights">Усі інсайти</a>`);
+  }
   if (appUrl) lines.push("", `<a href="${e(appUrl)}">Відкрити дашборд</a>`);
   return lines.join("\n");
 }

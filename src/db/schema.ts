@@ -307,3 +307,35 @@ export const targets = pgTable(
   },
   (t) => [primaryKey({ columns: [t.month, t.regionCode] })],
 );
+
+/** AI insights runs: what Claude concluded from the aggregated numbers (no lead personal data is sent). */
+export const aiInsights = pgTable(
+  "ai_insights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    trigger: text("trigger").notNull(), // cron | manual
+    requestedBy: text("requested_by"),
+    model: text("model").notNull(),
+    periodFrom: date("period_from").notNull(),
+    periodTo: date("period_to").notNull(),
+    health: integer("health"), // 0–100
+    summary: text("summary"),
+    insights: jsonb("insights").$type<AiInsight[]>().notNull().default([]),
+    snapshot: jsonb("snapshot"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    error: text("error"),
+  },
+  (t) => [index("ai_insights_created_idx").on(t.createdAt)],
+);
+
+export type AiInsight = {
+  severity: "critical" | "warning" | "info" | "good";
+  category: string;
+  title: string;
+  evidence: string[];
+  action: string;
+  expectedEffect?: string;
+  confidence: "high" | "medium" | "low";
+};

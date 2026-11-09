@@ -36,6 +36,13 @@
       "when": 1794265532389,
       "tag": "0004_regions_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794265905100,
+      "tag": "0005_ai_insights",
+      "breakpoints": true
     }
   ]
 }

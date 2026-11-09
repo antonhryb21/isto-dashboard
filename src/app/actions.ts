@@ -12,6 +12,7 @@ import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 import { ensureSeed, runSync, type SyncKind } from "@/lib/sync";
 import { syncCompetitors } from "@/lib/meta/competitors";
 import { sendDigest } from "@/lib/digest";
+import { aiEnabled, generateInsights, MANUAL_COOLDOWN_MINUTES, recentManualRun } from "@/lib/ai/insights";
 
 export type ActionResult = { ok: boolean; message?: string };
 
@@ -305,6 +306,27 @@ export async function sendDigestAction(): Promise<ActionResult> {
     await sendDigest();
     return { ok: true, message: "Звіт надіслано в Telegram" };
   } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ---------- AI insights ----------
+
+export async function generateInsightsAction(): Promise<ActionResult> {
+  const user = await requireUser("marketing");
+  if (!aiEnabled()) return { ok: false, message: "Не задано ANTHROPIC_API_KEY у Vercel" };
+  const recent = await recentManualRun();
+  if (recent) {
+    const left = MANUAL_COOLDOWN_MINUTES - Math.floor((Date.now() - recent.createdAt.getTime()) / 60_000);
+    return { ok: false, message: `Аналіз уже свіжий. Новий можна запустити через ${left} хв.` };
+  }
+  try {
+    await generateInsights("manual", user.email);
+    revalidatePath("/insights");
+    revalidatePath("/");
+    return { ok: true, message: "Готово" };
+  } catch (e) {
+    revalidatePath("/insights");
     return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }
 }

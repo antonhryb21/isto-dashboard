@@ -3,13 +3,15 @@ import Link from "next/link";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
 import { adDaily, adTotals, campaignOptions, creativeTable, crmTotals, followers, leadsDaily, socialTotals, romiFor, withCurrency } from "@/lib/queries";
-import { fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
+import { ago, fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Kpi, SectionTitle } from "@/components/kpi";
 import { SpendLeadsChart } from "@/components/charts";
 import { lastOkSync } from "@/lib/sync";
 import { monthPacing } from "@/lib/targets";
 import { PacingCard } from "@/components/pacing";
+import { latestInsights } from "@/lib/ai/insights";
+import { SEVERITY } from "@/components/insight-card";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -17,7 +19,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 export default async function Overview({ searchParams }: { searchParams: SP }) {
   const { f, currencies } = await withCurrency(parseFilters(await searchParams));
   const [regions, camps, everSynced] = await Promise.all([listRegions(), campaignOptions(), lastOkSync()]);
-  const [user, plan] = await Promise.all([requireUser(), monthPacing(f)]);
+  const [user, plan, ai] = await Promise.all([requireUser(), monthPacing(f), latestInsights()]);
   const [ad, adPrev, crm, crmPrev, daily, leadDays, social, socialPrev, fol, creatives] = await Promise.all([
     adTotals(f),
     adTotals(f, f.prevFrom, f.prevTo),
@@ -106,6 +108,30 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           items={plan.mixedCurrency ? plan.items.filter((p) => p.key !== "budget") : plan.items}
           canEdit={hasRole(user.role, "admin")}
         />
+      )}
+
+      {ai && (
+        <div className="card p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="label">AI-аналіз · {ai.health ?? "—"}/100</div>
+            <Link href="/insights" className="text-[12px] text-accent">
+              усі інсайти ({ai.insights.length}) · {ago(ai.createdAt)} →
+            </Link>
+          </div>
+          <p className="mt-2 text-[13.5px] leading-relaxed">{ai.summary}</p>
+          <ul className="mt-3 flex flex-col gap-1.5 text-[13px]">
+            {ai.insights.slice(0, 3).map((i) => (
+              <li key={i.title} className="flex gap-2">
+                <span className={`shrink-0 text-[11px] uppercase tracking-[0.06em] ${SEVERITY[i.severity]?.cls.split(" ").slice(1).join(" ")}`}>
+                  {SEVERITY[i.severity]?.label}
+                </span>
+                <span>
+                  {i.title} <span className="text-muted">— {i.action}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="card p-5">

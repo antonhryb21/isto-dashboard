@@ -21,6 +21,7 @@
   --sand: #a39d8d; /* Khaki Beige */
   --oak: #cec7b4; /* Pale Oak */
   --steel: #a5aab0; /* Cool Steel */
+  --warn: #a9822f;
   --good: #4f7a5e;
   --bad: #a4513f;
   --overlay: rgba(22, 22, 22, 0.62);
@@ -40,6 +41,7 @@
   --sand: #a39d8d;
   --oak: #cec7b4;
   --steel: #a5aab0;
+  --warn: #d4b06a;
   --good: #82b394;
   --bad: #d98a73;
   --overlay: rgba(0, 0, 0, 0.6);
@@ -60,6 +62,8 @@
   --color-oak: var(--oak);
   --color-good: var(--good);
   --color-bad: var(--bad);
+  --color-warn: var(--warn);
+  --color-steel: var(--steel);
   --color-overlay: var(--overlay);
   /*
    * Aptos is Microsoft's font: it comes with Windows 11 / Microsoft 365 and is used from the viewer's computer
