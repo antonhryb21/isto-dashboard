@@ -29,6 +29,13 @@
       "when": 1794264581461,
       "tag": "0003_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794265532389,
+      "tag": "0004_regions_usd",
+      "breakpoints": true
     }
   ]
 }

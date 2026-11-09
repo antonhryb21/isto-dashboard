@@ -95,7 +95,7 @@ export function LeadForm({
         <label className="flex flex-col gap-1 text-[12px] text-muted">
           Валюта
           <select name="dealCurrency" defaultValue={dealCurrency ?? "AED"} className="input">
-            {["AED", "EUR", "USD", "GBP"].map((c) => (
+            {["AED", "USD", "GBP"].map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>

@@ -25,8 +25,8 @@ export const NON_LEAD_TABS = [
 
 export const DEFAULT_REGIONS = [
   { code: "dubai", name: "Dubai", keywords: ["dubai", "uae", "оае", "дубай"], currency: "AED", sortOrder: 1 },
-  { code: "eu", name: "EU", keywords: ["eu", "europe", "європа"], currency: "EUR", sortOrder: 2 },
-  { code: "romania", name: "Romania", keywords: ["romania", "румунія", "ro_", " ro "], currency: "EUR", sortOrder: 3 },
+  { code: "eu", name: "EU", keywords: ["eu", "europe", "європа"], currency: "USD", sortOrder: 2 },
+  { code: "romania", name: "Romania", keywords: ["romania", "румунія", "ro_", " ro "], currency: "USD", sortOrder: 3 },
 ];
 
 export const DEFAULT_LEAD_SPREADSHEETS = [
