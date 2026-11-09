@@ -7,6 +7,8 @@ import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { RegionForm, RemoveUser, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
 import { CsvImport } from "@/components/csv-import";
+import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
+import { listCompetitors } from "@/lib/competitors";
 import { sheetsEnabled } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
@@ -24,11 +26,12 @@ const ENV = [
 
 export default async function AdminPage() {
   const me = await requireUser("admin");
-  const [people, regions, sources, runs] = await Promise.all([
+  const [people, regions, sources, runs, rivals] = await Promise.all([
     db.select().from(users).orderBy(asc(users.email)),
     listRegions(),
     db.select().from(leadSources).orderBy(asc(leadSources.spreadsheetId), asc(leadSources.sheetName)),
     db.select().from(syncRuns).orderBy(desc(syncRuns.startedAt)).limit(8),
+    listCompetitors(),
   ]);
   const regionOpts = regions.map((r) => ({ code: r.code, name: r.name }));
   const webhookUrl = `${process.env.APP_URL ?? ""}/api/webhooks/meta`;
@@ -127,6 +130,28 @@ export default async function AdminPage() {
         </div>
         <div className="mt-3">
           <RegionForm />
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <div className="label">Конкуренти</div>
+        <p className="mt-1 text-[12px] text-faint">
+          Instagram-акаунти на сторінці «Конкуренти» (мають бути бізнесові або авторські). ID сторінки в Ad Library — число з посилання
+          view_all_page_id=…; без нього кнопка «Реклама» відкриває пошук за назвою.
+        </p>
+        <div className="mt-3 flex flex-col gap-1.5">
+          {rivals.map((c) => (
+            <div key={c.username} className="flex flex-wrap items-center gap-3 text-[13px]">
+              <span className="font-medium">{c.name}</span>
+              <span className="text-faint">@{c.username}</span>
+              {c.adLibraryPageIds.length > 0 && <span className="text-[12px] text-faint">Ad Library: {c.adLibraryPageIds.join(", ")}</span>}
+              {c.lastError && <span className="text-[12px] text-bad">{c.lastError}</span>}
+              {!c.isOwn && <RemoveCompetitor username={c.username} />}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3">
+          <CompetitorForm />
         </div>
       </section>
 

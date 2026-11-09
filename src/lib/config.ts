@@ -33,3 +33,16 @@ export const DEFAULT_LEAD_SPREADSHEETS = [
   { spreadsheetId: "1M-iUXpDPoEUfGPbNJpB2hQXgOogS_vRECXi_0O17hnA", regionCode: "dubai", historySheetName: "ISTO_Status_History" },
   { spreadsheetId: "1ivae8hTOVHXsQVuVGPDrxRQYpAal9tLhjgvc5e-zn2I", regionCode: "eu", historySheetName: null },
 ];
+
+/**
+ * Accounts on the Competitors page. Ad Library page ids were looked up in the Meta Ad Library;
+ * accounts without one get a keyword search link instead. More can be added in Admin.
+ */
+export const DEFAULT_COMPETITORS = [
+  { username: "isto_architecture", name: "ISTO", isOwn: true, sortOrder: 0, adLibraryPageIds: ["305763869547948"] },
+  { username: "iqosa", name: "IQOSA", isOwn: false, sortOrder: 1, adLibraryPageIds: ["738822572816046"] },
+  { username: "b8architecture", name: "B8 Architecture", isOwn: false, sortOrder: 2, adLibraryPageIds: [] },
+  { username: "yodezeen_architects", name: "YODEZEEN", isOwn: false, sortOrder: 3, adLibraryPageIds: [] },
+  { username: "_saota", name: "SAOTA", isOwn: false, sortOrder: 4, adLibraryPageIds: [] },
+  { username: "nkey.architects", name: "NKEY Architects", isOwn: false, sortOrder: 5, adLibraryPageIds: ["107783874508942", "234116866451525"] },
+];

@@ -4,7 +4,7 @@
  * ISTO brand (Logobook 2026).
  * Palette: Porcelain Veil #F0F0F0 · Pale Oak #CEC7B4 · Khaki Beige #A39D8D · Stone Brown #60584D
  *          Cool Steel #A5AAB0 · Charcoal Blue #393E49 · Onyx #161616
- * Type:    TT Commons Pro (main, tracking −3%) · Erode Light Italic (secondary)
+ * Type:    Aptos (dashboard font, chosen by the team) · Erode Light Italic (secondary)
  * Light is the primary theme (the brand prefers the logo on white); dark uses Onyx.
  */
 :root,
@@ -61,8 +61,11 @@
   --color-good: var(--good);
   --color-bad: var(--bad);
   --color-overlay: var(--overlay);
-  /* TT Commons Pro is used when installed (brand computers); Figtree is the closest free web match. */
-  --font-sans: "TT Commons Pro", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Aptos is Microsoft's font: it comes with Windows 11 / Microsoft 365 and is used from the viewer's computer
+   * (its licence doesn't allow serving the files from the site). Without it, Figtree — a close free match.
+   */
+  --font-sans: "Aptos", "Aptos Display", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Erode", "Iowan Old Style", Georgia, serif;
 }
 

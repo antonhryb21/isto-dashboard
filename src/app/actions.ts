@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { leadSources, regions, users, type Role } from "@/db/schema";
+import { competitors, leadSources, regions, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { addComment, setLeadFields } from "@/lib/leads";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
 import { writeBackLead, discoverSources } from "@/lib/sheets/sync";
 import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
-import { runSync, type SyncKind } from "@/lib/sync";
+import { ensureSeed, runSync, type SyncKind } from "@/lib/sync";
+import { syncCompetitors } from "@/lib/meta/competitors";
 
 export type ActionResult = { ok: boolean; message?: string };
 
@@ -210,4 +211,52 @@ export async function importRowsAction(input: {
   }
   revalidatePath("/crm");
   return { ok: true, created, updated, skipped };
+}
+
+// ---------- Competitors ----------
+
+export async function syncCompetitorsAction(): Promise<ActionResult> {
+  await requireUser("marketing");
+  await ensureSeed();
+  const report = await syncCompetitors(2);
+  revalidatePath("/competitors");
+  const errors = Object.entries(report).filter(([, v]) => typeof v === "string");
+  return errors.length
+    ? { ok: false, message: errors.map(([k, v]) => `@${k}: ${String(v).replace(/^error: /, "")}`).join(" · ") }
+    : { ok: true, message: "Дані конкурентів оновлено" };
+}
+
+/** Accepts "@name", "name" or an instagram.com profile link. */
+function igUsername(raw: string) {
+  const s = raw.trim();
+  const m = s.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+  return (m ? m[1] : s.replace(/^@/, "")).toLowerCase();
+}
+
+export async function saveCompetitorAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {
+  await requireUser("admin");
+  const username = igUsername(String(form.get("username") ?? ""));
+  if (!/^[a-z0-9._]{1,30}$/.test(username)) return { ok: false, message: "Вкажіть нікнейм або посилання на Instagram" };
+  const name = String(form.get("name") ?? "").trim() || username;
+  const adLibraryPageIds = String(form.get("pages") ?? "")
+    .split(/[\s,]+/)
+    .map((x) => x.match(/\d{6,}/)?.[0])
+    .filter(Boolean) as string[];
+  await db
+    .insert(competitors)
+    .values({ username, name, adLibraryPageIds, active: true })
+    .onConflictDoUpdate({ target: competitors.username, set: { name, adLibraryPageIds, active: true } });
+  await syncCompetitors(1).catch(() => null);
+  revalidatePath("/competitors");
+  revalidatePath("/admin");
+  return { ok: true, message: `@${username} додано` };
+}
+
+export async function removeCompetitorAction(username: string): Promise<ActionResult> {
+  await requireUser("admin");
+  // Kept in the database (history stays), just hidden and no longer synced.
+  await db.update(competitors).set({ active: false }).where(eq(competitors.username, username));
+  revalidatePath("/competitors");
+  revalidatePath("/admin");
+  return { ok: true };
 }

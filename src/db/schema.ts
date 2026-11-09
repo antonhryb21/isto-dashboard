@@ -243,3 +243,52 @@ export type Lead = typeof leads.$inferSelect;
 export type LeadEvent = typeof leadEvents.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
+
+/** Instagram accounts tracked on the Competitors page (ISTO itself is one of them, `isOwn`). */
+export const competitors = pgTable("competitors", {
+  username: text("username").primaryKey(),
+  name: text("name").notNull(),
+  isOwn: boolean("is_own").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(100),
+  adLibraryPageIds: jsonb("ad_library_page_ids").$type<string[]>().notNull().default([]),
+  igId: text("ig_id"),
+  displayName: text("display_name"),
+  biography: text("biography"),
+  website: text("website"),
+  profilePictureUrl: text("profile_picture_url"),
+  followers: integer("followers"),
+  mediaCount: integer("media_count"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+});
+
+export const competitorSnapshots = pgTable(
+  "competitor_snapshots",
+  {
+    username: text("username").notNull(),
+    date: date("date").notNull(),
+    followers: integer("followers"),
+    mediaCount: integer("media_count"),
+  },
+  (t) => [primaryKey({ columns: [t.username, t.date] })],
+);
+
+/** Public posts of tracked accounts (Instagram Business Discovery: likes and comments only). */
+export const competitorPosts = pgTable(
+  "competitor_posts",
+  {
+    id: text("id").primaryKey(),
+    username: text("username").notNull(),
+    contentType: text("content_type").notNull(), // post | reel | carousel | video
+    caption: text("caption"),
+    mediaUrl: text("media_url"),
+    thumbnailUrl: text("thumbnail_url"),
+    permalink: text("permalink"),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    likes: integer("likes"), // null when the account hides like counts
+    comments: integer("comments"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("competitor_posts_user_idx").on(t.username, t.publishedAt)],
+);

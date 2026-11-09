@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const fmtDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
@@ -66,6 +66,51 @@ export function Sparkline({ data, dataKey }: { data: Record<string, number | str
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data}>
           <Area dataKey={dataKey} stroke={p.accent} fill={p.sand} fillOpacity={0.2} strokeWidth={1.5} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/**
+ * Follower growth in % since the start of the period, one line per account (own account thicker).
+ * Percent, because the accounts differ in size by orders of magnitude.
+ */
+export function FollowersChart({
+  data,
+  series,
+}: {
+  data: Record<string, number | string | null>[];
+  series: { key: string; name: string; own: boolean }[];
+}) {
+  const p = usePalette();
+  const colors = ["#a39d8d", "#5b7fa6", "#8a7fb0", "#c29a4b", "#b4704a", "#4f7a5e", "#a4513f", "#60584d"];
+  const axis = { stroke: p.faint, fontSize: 11, tickLine: false, axisLine: false } as const;
+  let i = 0;
+  return (
+    <div className="h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={p.line} vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmtDay} {...axis} minTickGap={24} />
+          <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+          <Tooltip
+            contentStyle={{ background: p.panel, border: `1px solid ${p.line}`, borderRadius: 4, fontSize: 12, color: p.text }}
+            labelFormatter={(d) => fmtDay(String(d))}
+            formatter={(v, name) => [`${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(2)}%`, name]}
+          />
+          <Legend iconType="plainline" wrapperStyle={{ fontSize: 12, color: p.text, paddingTop: 8 }} />
+          {series.map((s) => (
+            <Line
+              key={s.key}
+              dataKey={s.key}
+              name={s.name}
+              stroke={s.own ? p.accent : colors[i++ % colors.length]}
+              strokeWidth={s.own ? 2.6 : 1.5}
+              dot={false}
+              connectNulls
+            />
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

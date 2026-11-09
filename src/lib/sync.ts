@@ -1,8 +1,9 @@
 import "server-only";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { regions, syncRuns } from "@/db/schema";
-import { DEFAULT_LEAD_SPREADSHEETS, DEFAULT_REGIONS } from "@/lib/config";
+import { competitors, regions, syncRuns } from "@/db/schema";
+import { DEFAULT_COMPETITORS, DEFAULT_LEAD_SPREADSHEETS, DEFAULT_REGIONS } from "@/lib/config";
+import { syncCompetitors } from "@/lib/meta/competitors";
 import { syncAdStructure, syncInsights } from "@/lib/meta/ads";
 import { syncFacebook, syncInstagram } from "@/lib/meta/social";
 import { discoverSources, importAllSources } from "@/lib/sheets/sync";
@@ -18,6 +19,7 @@ const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISO
 /** Idempotent first-run setup: regions and the known lead spreadsheets. */
 export async function ensureSeed() {
   for (const r of DEFAULT_REGIONS) await db.insert(regions).values(r).onConflictDoNothing();
+  for (const c of DEFAULT_COMPETITORS) await db.insert(competitors).values(c).onConflictDoNothing();
   if (!sheetsEnabled()) return;
   for (const s of DEFAULT_LEAD_SPREADSHEETS) {
     try {
@@ -66,6 +68,7 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(30));
     await step("facebook", () => syncFacebook(30));
     await step("metaLeads", () => syncMetaLeads(3));
+    await step("competitors", () => syncCompetitors(2));
     if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
   if (kind === "backfill") {
@@ -85,6 +88,7 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(120));
     await step("facebook", () => syncFacebook(120, 1000));
     await step("metaLeads", () => syncMetaLeads(90));
+    await step("competitors", () => syncCompetitors(10));
     if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
 

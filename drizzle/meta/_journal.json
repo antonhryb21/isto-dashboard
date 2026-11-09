@@ -15,6 +15,13 @@
       "when": 1794243485546,
       "tag": "0001_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794250002783,
+      "tag": "0002_competitors",
+      "breakpoints": true
     }
   ]
 }
