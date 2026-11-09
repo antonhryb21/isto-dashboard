@@ -58,11 +58,11 @@ export function FilterBar({
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className={`text-[12px] ${preset === "custom" ? "text-text" : "text-faint"}`}>Свій період:</span>
         <input
           type="date"
-          className="input"
+          className="input min-w-0"
           value={from}
           max={to}
           onChange={(e) => e.target.value && set({ from: e.target.value, to: e.target.value > to ? e.target.value : to, p: null })}
@@ -71,7 +71,7 @@ export function FilterBar({
         <span className="text-faint">–</span>
         <input
           type="date"
-          className="input"
+          className="input min-w-0"
           value={to}
           min={from}
           onChange={(e) => e.target.value && set({ to: e.target.value, from: e.target.value < from ? e.target.value : from, p: null })}

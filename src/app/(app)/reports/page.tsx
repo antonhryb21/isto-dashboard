@@ -144,7 +144,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         <table className="data report">
           <thead>
             <tr>
-              <th className="sticky-col display !text-[20px] !normal-case !tracking-normal text-text">{groupLabel}</th>
+              <th className="sticky-col display !text-[14px] !normal-case !tracking-normal text-text">{groupLabel}</th>
               {cols.map((c) => (
                 <th key={c.key} className="num !text-text">
                   {c.label}

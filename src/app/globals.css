@@ -205,13 +205,23 @@ table.report td,
 table.report th {
   border-right: 1px solid color-mix(in oklab, var(--line) 70%, transparent);
 }
+table.report {
+  font-size: 12px;
+}
+table.report th,
+table.report td {
+  padding: 5px 10px;
+}
+table.report th {
+  font-size: 10.5px;
+}
 table.report .sticky-col {
   position: sticky;
   left: 0;
   z-index: 1;
   background: var(--panel);
-  text-align: right;
-  font-weight: 600;
+  text-align: left;
+  font-weight: 500;
   white-space: nowrap;
 }
 table.report tr.band-social td {
