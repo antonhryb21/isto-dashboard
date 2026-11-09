@@ -1,3 +1,5 @@
+import { IstoLogo } from "@/components/logo";
+
 const ERRORS: Record<string, string> = {
   not_allowed: "Цей Google-акаунт не має доступу. Попросіть адміністратора додати вас.",
   state: "Сесія входу застаріла. Спробуйте ще раз.",
@@ -14,7 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="min-h-screen grid place-items-center px-4">
       <div className="card w-full max-w-sm p-8">
-        <div className="text-[15px] font-light tracking-[0.42em]">ISTO</div>
+        <IstoLogo width={128} className="text-text" />
         <h1 className="display mt-5 text-[28px]">
           Marketing <em>dashboard</em>
         </h1>

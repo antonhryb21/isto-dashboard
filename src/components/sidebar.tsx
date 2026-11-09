@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Users } from "lucide-react";
+import { IstoLogo } from "@/components/logo";
 
 const NAV = [
   { href: "/", label: "Огляд", icon: LayoutGrid },
@@ -30,8 +31,8 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
   return (
     <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-line bg-panel-2 px-3 py-6">
       <Link href={`/${suffix}`} className="px-3">
-        <div className="text-[15px] font-light tracking-[0.42em] text-text">ISTO</div>
-        <div className="serif mt-1 text-[13px] text-muted">marketing</div>
+        <IstoLogo width={120} className="text-text" />
+        <div className="serif mt-2 text-[13px] text-muted">marketing</div>
       </Link>
       <nav className="mt-7 flex flex-col gap-0.5">
         {items.map(({ href, label, icon: Icon }) => {

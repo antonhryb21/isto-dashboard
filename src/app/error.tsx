@@ -1,11 +1,13 @@
 "use client";
 
+import { IstoLogo } from "@/components/logo";
+
 /** Shown instead of a blank page when a server component fails (e.g. database not reachable). */
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <main className="min-h-screen grid place-items-center px-4">
       <div className="card w-full max-w-md p-8">
-        <div className="text-[15px] font-light tracking-[0.42em]">ISTO</div>
+        <IstoLogo width={128} className="text-text" />
         <h1 className="display mt-4 text-[24px]">Сторінка не завантажилась</h1>
         <p className="mt-2 text-sm text-muted">
           Найчастіше причина в налаштуваннях: немає з&apos;єднання з базою або бракує змінної у Vercel. Подробиці — у Vercel → Logs
