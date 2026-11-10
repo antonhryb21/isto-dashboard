@@ -2,6 +2,7 @@ import "server-only";
 import { localDate } from "@/lib/dates";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db";
+import { upsertMany } from "@/db/upsert";
 import { accountSnapshots, ads, socialPosts, socialPostSnapshots } from "@/db/schema";
 import { META } from "@/lib/config";
 import { graph, graphAll, graphAsPage, graphAllAsPage, MetaError } from "./client";
@@ -19,23 +20,62 @@ type Metrics = Partial<
 async function insightsTolerant(
   fetcher: (metric: string) => Promise<{ data: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }>,
   metrics: string[],
+  rejected?: Set<string>,
 ): Promise<Record<string, number>> {
   const read = (rows: { name: string; values?: { value: number }[]; total_value?: { value: number } }[]) =>
     Object.fromEntries(rows.map((r) => [r.name, Number(r.total_value?.value ?? r.values?.[0]?.value ?? 0)]));
+  const ask = rejected ? metrics.filter((m) => !rejected.has(m)) : metrics;
+  if (!ask.length) return {};
   try {
-    return read((await fetcher(metrics.join(","))).data);
+    return read((await fetcher(ask.join(","))).data);
   } catch (e) {
     if (!(e instanceof MetaError)) throw e;
     const out: Record<string, number> = {};
-    for (const m of metrics) {
+    for (const m of ask) {
       try {
         Object.assign(out, read((await fetcher(m)).data));
       } catch {
-        /* metric unavailable for this item */
+        // Unavailable (deprecated or not for this media type): not asked again during this run,
+        // which used to cost one extra request per metric for every post.
+        rejected?.add(m);
       }
     }
     return out;
   }
+}
+
+/** Runs `fn` over items with at most `limit` in flight. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/** Saves posts in bulk; rows are grouped by which metric columns they carry, so missing metrics never overwrite stored ones. */
+async function savePosts(rows: Record<string, unknown>[]) {
+  const groups = new Map<string, Record<string, unknown>[]>();
+  for (const r of rows) {
+    const sig = Object.keys(r).sort().join(",");
+    groups.set(sig, [...(groups.get(sig) ?? []), r]);
+  }
+  for (const g of groups.values()) await upsertMany(socialPosts, g as never, socialPosts.id, { key: (r) => String((r as { id: string }).id) });
+}
+
+async function saveSnapshots(items: { postId: string; metrics: Metrics }[]) {
+  const date = today();
+  await upsertMany(
+    socialPostSnapshots,
+    items.map(({ postId, metrics }) => ({ postId, date, metrics: Object.fromEntries(Object.entries(metrics).map(([k, v]) => [k, v ?? null])) })),
+    [socialPostSnapshots.postId, socialPostSnapshots.date],
+    { key: (r) => r.postId },
+  );
 }
 
 // ---------- Instagram ----------
@@ -93,53 +133,50 @@ export async function syncInstagram(insightDays = 30) {
     (await db.select({ id: ads.instagramMediaId }).from(ads)).map((r) => r.id).filter(Boolean) as string[],
   );
   const cutoff = Date.now() - insightDays * 86_400_000;
-  let withInsights = 0;
+  const rejected: Record<string, Set<string>> = { FEED: new Set(), REELS: new Set() };
+  const snaps: { postId: string; metrics: Metrics }[] = [];
 
-  for (const m of media) {
-    if (m.media_product_type === "STORY") continue;
-    const isRecent = new Date(m.timestamp).getTime() >= cutoff;
-    let metrics: Metrics = { likes: m.like_count, comments: m.comments_count };
-
-    if (isRecent) {
-      const raw = await insightsTolerant(
-        (metric) => graph(`${m.id}/insights`, { metric }),
-        IG_METRICS[m.media_product_type === "REELS" ? "REELS" : "FEED"],
-      );
-      metrics = {
-        reach: raw.reach,
-        saves: raw.saved,
-        shares: raw.shares,
-        views: raw.views,
-        likes: raw.likes ?? m.like_count,
-        comments: raw.comments ?? m.comments_count,
-        profileVisits: raw.profile_visits,
-        follows: raw.follows,
-        totalInteractions: raw.total_interactions,
+  const rows = await mapLimit(
+    media.filter((m) => m.media_product_type !== "STORY"),
+    6,
+    async (m) => {
+      let metrics: Metrics = { likes: m.like_count, comments: m.comments_count };
+      if (new Date(m.timestamp).getTime() >= cutoff) {
+        const kind = m.media_product_type === "REELS" ? "REELS" : "FEED";
+        const raw = await insightsTolerant((metric) => graph(`${m.id}/insights`, { metric }), IG_METRICS[kind], rejected[kind]);
+        metrics = {
+          reach: raw.reach,
+          saves: raw.saved,
+          shares: raw.shares,
+          views: raw.views,
+          likes: raw.likes ?? m.like_count,
+          comments: raw.comments ?? m.comments_count,
+          profileVisits: raw.profile_visits,
+          follows: raw.follows,
+          totalInteractions: raw.total_interactions,
+        };
+        snaps.push({ postId: m.id, metrics });
+      }
+      // Only metrics we actually received are written, so older posts keep their last known insights.
+      return {
+        id: m.id,
+        platform: "ig",
+        accountId: ig,
+        contentType: igContentType(m),
+        caption: m.caption ?? null,
+        mediaUrl: m.media_type === "VIDEO" ? (m.thumbnail_url ?? null) : (m.media_url ?? null),
+        thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
+        permalink: m.permalink ?? null,
+        publishedAt: new Date(m.timestamp),
+        boosted: boosted.has(m.id),
+        updatedAt: new Date(),
+        ...definedOnly(metrics),
       };
-      withInsights++;
-      await snapshot(m.id, metrics);
-    }
-
-    const base = {
-      id: m.id,
-      platform: "ig",
-      accountId: ig,
-      contentType: igContentType(m),
-      caption: m.caption ?? null,
-      mediaUrl: m.media_type === "VIDEO" ? (m.thumbnail_url ?? null) : (m.media_url ?? null),
-      thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
-      permalink: m.permalink ?? null,
-      publishedAt: new Date(m.timestamp),
-      boosted: boosted.has(m.id),
-      updatedAt: new Date(),
-    };
-    // Only overwrite metrics we actually received, so older posts keep their last known insights.
-    const metricCols = definedOnly(metrics);
-    await db
-      .insert(socialPosts)
-      .values({ ...base, ...metricCols })
-      .onConflictDoUpdate({ target: socialPosts.id, set: { ...base, ...metricCols } });
-  }
+    },
+  );
+  await savePosts(rows);
+  await saveSnapshots(snaps);
+  const withInsights = snaps.length;
 
   return { posts: media.length, withInsights };
 }
@@ -198,7 +235,9 @@ export async function syncFacebook(insightDays = 30, maxPosts = 300) {
   );
   const cutoff = Date.now() - insightDays * 86_400_000;
 
-  for (const p of posts) {
+  const rejected = new Set<string>();
+  const snaps: { postId: string; metrics: Metrics }[] = [];
+  const rows = await mapLimit(posts, 6, async (p) => {
     let metrics: Metrics = {
       likes: p.reactions?.summary?.total_count,
       comments: p.comments?.summary?.total_count,
@@ -208,15 +247,12 @@ export async function syncFacebook(insightDays = 30, maxPosts = 300) {
       const raw = await insightsTolerant(
         (metric) => graphAsPage(`${p.id}/insights`, { metric }),
         ["post_impressions_unique", "post_media_view", "post_clicks", "post_video_views"],
+        rejected,
       );
-      metrics = {
-        ...metrics,
-        reach: raw.post_impressions_unique,
-        views: raw.post_media_view ?? raw.post_video_views,
-      };
-      await snapshot(p.id, metrics);
+      metrics = { ...metrics, reach: raw.post_impressions_unique, views: raw.post_media_view ?? raw.post_video_views };
+      snaps.push({ postId: p.id, metrics });
     }
-    const base = {
+    return {
       id: p.id,
       platform: "fb",
       accountId: pageId,
@@ -228,22 +264,12 @@ export async function syncFacebook(insightDays = 30, maxPosts = 300) {
       publishedAt: new Date(p.created_time),
       boosted: boosted.has(p.id),
       updatedAt: new Date(),
+      ...definedOnly(metrics),
     };
-    const metricCols = definedOnly(metrics);
-    await db
-      .insert(socialPosts)
-      .values({ ...base, ...metricCols })
-      .onConflictDoUpdate({ target: socialPosts.id, set: { ...base, ...metricCols } });
-  }
+  });
+  await savePosts(rows);
+  await saveSnapshots(snaps);
   return { posts: posts.length };
-}
-
-async function snapshot(postId: string, m: Metrics) {
-  const metrics = Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v ?? null]));
-  await db
-    .insert(socialPostSnapshots)
-    .values({ postId, date: today(), metrics })
-    .onConflictDoUpdate({ target: [socialPostSnapshots.postId, socialPostSnapshots.date], set: { metrics } });
 }
 
 function definedOnly(m: Metrics) {
