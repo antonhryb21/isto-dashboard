@@ -4,7 +4,7 @@ import { detectRegion, listRegions } from "@/lib/regions";
 import { upsertLead } from "@/lib/leads";
 import { graphAllAsPage, graphAsPage, graphPost, pageToken } from "./client";
 
-type FieldData = { name: string; values: string[] };
+type FieldData = { name: string; values?: string[] | null };
 type ApiLead = {
   id: string;
   created_time: string;
@@ -65,26 +65,40 @@ export async function syncMetaLeads(sinceDays: number) {
   });
   const allRegions = await listRegions();
   let created = 0;
+  const failed: string[] = [];
   for (const form of forms) {
-    const list = await graphAllAsPage<FormLead>(
-      `${form.id}/leads`,
-      {
-        fields: "id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,platform,is_organic,field_data",
-        filtering: JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]),
-        limit: 100,
-      },
-      5000,
-    );
+    let list: FormLead[];
+    try {
+      list = await graphAllAsPage<FormLead>(
+        `${form.id}/leads`,
+        {
+          fields: "id,created_time,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,platform,is_organic,field_data",
+          filtering: JSON.stringify([{ field: "time_created", operator: "GREATER_THAN", value: since }]),
+          limit: 100,
+        },
+        5000,
+      );
+    } catch (e) {
+      failed.push(`${form.name ?? form.id}: ${e instanceof Error ? e.message : e}`);
+      continue;
+    }
+    // One odd lead must not stop the rest.
     for (const l of list) {
-      const res = await upsertLead(toIncoming(l, form.name ?? null, allRegions), "meta");
-      if (res === "created") created++;
+      try {
+        const res = await upsertLead(toIncoming(l, form.name ?? null, allRegions), "meta");
+        if (res === "created") created++;
+      } catch (e) {
+        failed.push(`lead ${l.id}: ${e instanceof Error ? e.message : e}`);
+      }
     }
   }
-  return { forms: forms.length, created };
+  if (failed.length && created === 0 && failed.length >= forms.length) throw new Error(failed.slice(0, 3).join(" · "));
+  return { forms: forms.length, created, ...(failed.length ? { failedItems: failed.length, firstProblem: failed[0].slice(0, 200) } : {}) };
 }
 
 function toIncoming(l: ApiLead, formName: string | null, allRegions: Awaited<ReturnType<typeof listRegions>>) {
-  const fields = Object.fromEntries((l.field_data ?? []).map((f) => [f.name, f.values.join(", ")]));
+  // Some question types come without `values` (e.g. consent checkboxes): treat them as empty.
+  const fields = Object.fromEntries((l.field_data ?? []).map((f) => [f.name, (f.values ?? []).filter(Boolean).join(", ")]));
   const pick = (keys: string[]) => keys.map((k) => fields[k]).find(Boolean) ?? null;
   const used = new Set(Object.values(CONTACT).flat());
   const answers = Object.fromEntries(
