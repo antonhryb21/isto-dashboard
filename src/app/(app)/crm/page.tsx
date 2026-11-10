@@ -11,6 +11,7 @@ import { fmtDate, fmtInt, fmtMinutes, fmtPct, plural } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
 import { StatusBadge, StatusSelect } from "@/components/crm-controls";
+import { leadContact } from "@/lib/lead-contact";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
@@ -149,16 +150,11 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                     )}
                   </td>
                   <td>
-                    <Link href={`/crm/${l.id}`} className="font-medium hover:text-accent">
-                      {l.fullName || l.email || l.phone || "Без імені"}
-                    </Link>
-                    <div className="text-[11.5px] text-faint">
-                      {[l.phone, l.city].filter(Boolean).join(" · ")}
-                    </div>
+                    <LeadContact l={l} />
                   </td>
                   <td className="text-muted">{l.regionCode ? regionName[l.regionCode] ?? l.regionCode : "—"}</td>
-                  <td className="max-w-64 truncate text-muted" title={Object.values(l.answers).join(" · ")}>
-                    {Object.values(l.answers).slice(0, 2).join(" · ") || "—"}
+                  <td className="max-w-64 truncate text-muted" title={Object.values(leadContact(l).interest).join(" · ")}>
+                    {Object.values(leadContact(l).interest).slice(0, 2).join(" · ") || "—"}
                   </td>
                   <td className="max-w-56 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
                     {l.isOrganic ? "органіка" : l.campaignName ?? "—"}
@@ -185,13 +181,14 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                 <div className="flex flex-col gap-2">
                   {items.slice(0, 60).map((l) => (
                     <Link key={l.id} href={`/crm/${l.id}`} className="card block p-3 hover:border-faint">
-                      <div className="truncate text-[13px] font-medium">{l.fullName || l.email || l.phone || "Без імені"}</div>
+                      <div className="truncate text-[13px] font-medium">{leadContact(l).name || "Без імені"}</div>
+                      {leadContact(l).phone && <div className="truncate text-[11.5px] text-muted">{leadContact(l).phone}</div>}
                       <div className="mt-0.5 text-[11.5px] text-faint">
                         {fmtDate(l.createdTime)} · {l.regionCode ? regionName[l.regionCode] ?? l.regionCode : "—"}
                         {l.owner ? ` · ${l.owner}` : ""}
                       </div>
-                      {Object.values(l.answers)[0] && (
-                        <div className="mt-1.5 line-clamp-2 text-[12px] text-muted">{Object.values(l.answers).slice(0, 2).join(" · ")}</div>
+                      {Object.values(leadContact(l).interest)[0] && (
+                        <div className="mt-1.5 line-clamp-2 text-[12px] text-muted">{Object.values(leadContact(l).interest).slice(0, 2).join(" · ")}</div>
                       )}
                     </Link>
                   ))}
@@ -234,6 +231,21 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Name, phone, email and city — one per line, as the team reads them. */
+function LeadContact({ l }: { l: Parameters<typeof leadContact>[0] & { id: string } }) {
+  const c = leadContact(l);
+  return (
+    <div className="flex min-w-48 flex-col leading-snug">
+      <Link href={`/crm/${l.id}`} className="font-medium hover:text-accent">
+        {c.name || <span className="text-faint">Без імені</span>}
+      </Link>
+      {c.phone && <span className="text-[12px] text-muted">{c.phone}</span>}
+      {c.email && <span className="break-all text-[12px] text-muted">{c.email}</span>}
+      {c.city && <span className="text-[12px] text-faint">{c.city}</span>}
     </div>
   );
 }

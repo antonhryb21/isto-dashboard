@@ -2,6 +2,7 @@ import "server-only";
 import { META } from "@/lib/config";
 import { detectRegion, listRegions } from "@/lib/regions";
 import { upsertLead } from "@/lib/leads";
+import { leadContact } from "@/lib/lead-contact";
 import { graphAllAsPage, graphAsPage, graphPost, pageToken } from "./client";
 
 type FieldData = { name: string; values?: string[] | null };
@@ -106,6 +107,8 @@ function toIncoming(l: ApiLead, formName: string | null, allRegions: Awaited<Ret
       .filter(([k]) => !used.has(k))
       .map(([k, v]) => [k.replace(/[_:?]+$/g, "").replace(/_/g, " "), v]),
   );
+  // Custom questions ("Your name", "Country") are recognised too; see lead-contact.ts.
+  const c = leadContact({ fullName: pick(CONTACT.full_name), phone: pick(CONTACT.phone), email: pick(CONTACT.email), city: pick(CONTACT.city), answers });
   return {
     metaLeadId: l.id,
     createdTime: new Date(l.created_time),
@@ -120,10 +123,10 @@ function toIncoming(l: ApiLead, formName: string | null, allRegions: Awaited<Ret
     adName: l.ad_name ?? null,
     formId: l.form_id ?? null,
     formName,
-    fullName: pick(CONTACT.full_name),
-    phone: pick(CONTACT.phone),
-    email: pick(CONTACT.email),
-    city: pick(CONTACT.city),
-    answers,
+    fullName: c.name,
+    phone: c.phone,
+    email: c.email,
+    city: c.city,
+    answers: c.interest,
   };
 }

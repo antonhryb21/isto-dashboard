@@ -63,7 +63,7 @@ export default async function CompetitorsPage({ searchParams }: { searchParams: 
       ) : (
         <>
           <div className="card overflow-x-auto">
-            <table className="data">
+            <table className="data lined">
               <thead>
                 <tr>
                   <th>Акаунт</th>
@@ -119,8 +119,9 @@ export default async function CompetitorsPage({ searchParams }: { searchParams: 
                             target="_blank"
                             rel="noreferrer"
                             className="flex items-center gap-1 whitespace-nowrap text-[12px] text-muted hover:text-text"
+                            title={id ? "Активна реклама в Meta Ad Library" : "Пошук за назвою в Meta Ad Library"}
                           >
-                            {id ? (r.adLibraryPageIds.length > 1 ? `Ad Library ${i + 1}` : "Ad Library") : "пошук в Ad Library"} <ExternalLink size={11} />
+                            {id ? (r.adLibraryPageIds.length > 1 ? `Ad Library ${i + 1}` : "Ad Library") : "пошук"} <ExternalLink size={11} />
                           </a>
                         ))}
                       </div>

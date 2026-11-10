@@ -242,3 +242,15 @@ table.report th.total {
   font-weight: 600;
   background: color-mix(in oklab, var(--oak) 22%, var(--panel));
 }
+
+/* Wide comparison tables: column lines and more air between metrics. */
+table.lined th,
+table.lined td {
+  padding-left: 16px;
+  padding-right: 16px;
+  border-right: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+}
+table.lined th:last-child,
+table.lined td:last-child {
+  border-right: 0;
+}

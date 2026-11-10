@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts } from "@/db/schema";
 import type { Filters } from "@/lib/filters";
@@ -391,6 +391,23 @@ export async function socialList(f: Filters) {
   return db.select().from(socialPosts).where(and(...w)).orderBy(desc(socialPosts.publishedAt)).limit(300);
 }
 
+/** One platform's posts for the period, a page at a time, with the total count for paging. */
+export async function socialPage(f: Filters, platform: "ig" | "fb", page: number, perPage: number) {
+  const w: SQL[] = [
+    eq(socialPosts.platform, platform),
+    gte(socialPosts.publishedAt, new Date(f.from + "T00:00:00Z")),
+    lte(socialPosts.publishedAt, new Date(f.to + "T23:59:59Z")),
+  ];
+  if (f.type) w.push(eq(socialPosts.contentType, f.type));
+  if (f.q) w.push(ilike(socialPosts.caption, `%${f.q}%`));
+  const [rows, [c]] = await Promise.all([
+    db.select().from(socialPosts).where(and(...w)).orderBy(desc(socialPosts.publishedAt)).limit(perPage).offset((page - 1) * perPage),
+    db.select({ n: sql<string>`count(*)` }).from(socialPosts).where(and(...w)),
+  ]);
+  const total = num(c?.n);
+  return { rows, total, pages: Math.max(1, Math.ceil(total / perPage)) };
+}
+
 export async function socialTotals(f: Filters, from = f.from, to = f.to) {
   const w: SQL[] = [
     gte(socialPosts.publishedAt, new Date(from + "T00:00:00Z")),
@@ -425,8 +442,9 @@ export async function socialTotals(f: Filters, from = f.from, to = f.to) {
 
 export async function followers() {
   const rows = await db
-    .select({ platform: accountSnapshots.platform, date: accountSnapshots.date, followers: accountSnapshots.followers })
+    .select({ platform: accountSnapshots.platform, date: accountSnapshots.date, followers: accountSnapshots.followers, mediaCount: accountSnapshots.mediaCount })
     .from(accountSnapshots)
+    .where(isNotNull(accountSnapshots.followers))
     .orderBy(desc(accountSnapshots.date))
     .limit(60);
   const latest = (p: string) => rows.find((r) => r.platform === p) ?? null;

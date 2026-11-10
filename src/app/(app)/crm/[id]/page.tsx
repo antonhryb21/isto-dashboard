@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { leadContact } from "@/lib/lead-contact";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
@@ -19,6 +20,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const { lead, events, ad } = data;
   const canEdit = hasRole(user.role, "marketing");
   const region = regions.find((r) => r.code === lead.regionCode);
+  const c = leadContact(lead);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -28,7 +30,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-[24px] font-semibold">{lead.fullName || lead.email || lead.phone || "Без імені"}</h1>
+          <h1 className="text-[24px] font-semibold">{c.name || "Без імені"}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-[13px] text-muted">
             <StatusBadge status={lead.status} />
             <span>{fmtDate(lead.createdTime, true)}</span>
@@ -44,24 +46,26 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <section className="card p-5">
             <div className="label">Контакти</div>
             <dl className="mt-3 grid grid-cols-[120px_1fr] gap-y-2 text-[13.5px]">
+              <dt className="text-muted">Імʼя</dt>
+              <dd>{c.name ?? "—"}</dd>
               <dt className="text-muted">Телефон</dt>
-              <dd>{lead.phone ? <a href={`tel:${lead.phone}`} className="hover:text-accent">{lead.phone}</a> : "—"}
-                {lead.phone && (
-                  <a className="ml-3 text-[12px] text-accent" href={`https://wa.me/${lead.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a>
+              <dd>{c.phone ? <a href={`tel:${c.phone}`} className="hover:text-accent">{c.phone}</a> : "—"}
+                {c.phone && (
+                  <a className="ml-3 text-[12px] text-accent" href={`https://wa.me/${c.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">WhatsApp</a>
                 )}
               </dd>
-              <dt className="text-muted">Email</dt>
-              <dd>{lead.email ? <a href={`mailto:${lead.email}`} className="hover:text-accent">{lead.email}</a> : "—"}</dd>
+              <dt className="text-muted">Пошта</dt>
+              <dd>{c.email ? <a href={`mailto:${c.email}`} className="hover:text-accent">{c.email}</a> : "—"}</dd>
               <dt className="text-muted">Місто</dt>
-              <dd>{lead.city ?? "—"}</dd>
+              <dd>{c.city ?? "—"}</dd>
             </dl>
           </section>
 
-          {Object.keys(lead.answers).length > 0 && (
+          {Object.keys(c.interest).length > 0 && (
             <section className="card p-5">
               <div className="label">Відповіді з форми</div>
               <dl className="mt-3 grid grid-cols-[minmax(120px,40%)_1fr] gap-x-4 gap-y-2 text-[13.5px]">
-                {Object.entries(lead.answers).map(([q, a]) => (
+                {Object.entries(c.interest).map(([q, a]) => (
                   <div key={q} className="contents">
                     <dt className="text-muted first-letter:uppercase">{q}</dt>
                     <dd>{a}</dd>
