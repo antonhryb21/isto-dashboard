@@ -203,10 +203,16 @@ function PostCard({ p }: { p: Post }) {
       <div className="flex flex-1 flex-col p-2.5">
         {p.caption ? <p className="line-clamp-2 text-[12px] leading-snug">{p.caption}</p> : <p className="text-[12px] text-faint">Без підпису</p>}
         <div className="mt-auto grid grid-cols-3 gap-y-1 pt-2 text-[11px]">
-          <M icon={<Eye size={11} />} v={p.reach} title="Охоплення" />
+          <M icon={<Eye size={11} />} v={p.reach} title={p.platform === "fb" ? "Охоплення (унікальні глядачі)" : "Охоплення"} />
           <M icon={<Heart size={11} />} v={p.likes} title="Вподобання" />
           <M icon={<MessageCircle size={11} />} v={p.comments} title="Коментарі" />
-          <M icon={<Bookmark size={11} />} v={p.saves} title="Збереження" />
+          {p.platform === "ig" ? (
+            <M icon={<Bookmark size={11} />} v={p.saves} title="Збереження" />
+          ) : (
+            <span className="text-faint" title="Facebook не віддає збереження постів через API">
+              <Bookmark size={11} className="inline" /> н/д
+            </span>
+          )}
           <M icon={<Send size={11} />} v={p.shares} title="Репости" />
           <M icon={<Play size={11} />} v={p.views} title="Перегляди" />
         </div>

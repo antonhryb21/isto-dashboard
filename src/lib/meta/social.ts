@@ -246,10 +246,16 @@ export async function syncFacebook(insightDays = 30, maxPosts = 300) {
     if (new Date(p.created_time).getTime() >= cutoff) {
       const raw = await insightsTolerant(
         (metric) => graphAsPage(`${p.id}/insights`, { metric }),
-        ["post_impressions_unique", "post_media_view", "post_clicks", "post_video_views"],
+        // Meta retired post_impressions_unique (June 2026); unique viewers is the reach that replaced it.
+        // Both spellings seen in Meta's notes are asked; whichever is rejected is skipped for the rest of the run.
+        ["post_total_media_view_unique", "post_total_media_views_unique", "post_media_view", "post_impressions_unique", "post_video_views"],
         rejected,
       );
-      metrics = { ...metrics, reach: raw.post_impressions_unique, views: raw.post_media_view ?? raw.post_video_views };
+      metrics = {
+        ...metrics,
+        reach: raw.post_total_media_view_unique ?? raw.post_total_media_views_unique ?? raw.post_impressions_unique,
+        views: raw.post_media_view ?? raw.post_video_views,
+      };
       snaps.push({ postId: p.id, metrics });
     }
     return {
