@@ -40,7 +40,8 @@
 | `META_APP_ID`, `META_APP_SECRET` | Застосунок Meta «ISTO Dashboard» |
 | `META_SYSTEM_USER_TOKEN` | Безстроковий токен системного користувача |
 | `META_WEBHOOK_VERIFY_TOKEN` | Випадковий рядок для перевірки вебхука |
-| `LEADS_API_TOKEN` | Випадковий рядок; ним Telegram-бот (n8n) підписує запити зі статусами |
+| `LEADS_API_TOKEN` | Випадковий рядок; ним Telegram-бот (n8n) підписує запити з новими лідами і статусами |
+| `TELEGRAM_LEADS_BOT_TOKEN` | Токен бота, що публікує картки лідів (n8n); потрібен, щоб статуси з CRM оновлювали картки в Telegram |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth-клієнт для входу; redirect URI `https://<домен>/api/auth/callback/google` |
 
 Необов'язкові: `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` — лише якщо треба живу двосторонню синхронізацію з Google Таблицями (за замовчуванням вимкнена); `META_API_VERSION` (за замовчуванням `v27.0`), `META_AD_ACCOUNT_IDS`, `META_PAGE_ID`, `META_IG_USER_ID` — якщо зміняться кабінети чи сторінка.
@@ -55,7 +56,7 @@
 
 **Історія з Google Таблиць** — один раз: у таблиці відкрийте вкладку з лідами → Файл → Завантажити → CSV, і в Адмін → «Імпорт історії лідів» оберіть файли (можна кілька). Колонки розпізнаються за назвами (`id`, `created_time`, `campaign_name`, `phone`, `email`, `lead_status`, `New Bizz`/`owner`, `Comments`…), решта — відповіді з форми. Лід, що є в кількох вкладках, обʼєднується; статус з файлу застосовується лише до лідів зі статусом New, яких ще не змінювали в CRM чи ботом, тож повторний імпорт нічого не зіпсує.
 
-**Статуси** — New → Contacted → Follow-up → Meeting → Proposal sent → Won / Lost, плюс No answer, Not relevant, Supplier, Spam. Старі значення (CREATED, Новый, Spam / Supplier) зводяться до них автоматично.
+**Статуси** — New → Contacted → Lead (Qualified) → Follow-up → Meeting → Proposal sent → Won / Lost, плюс No answer, Not relevant, Job inquiry, Supplier, Spam. Старі значення (CREATED, Новый, Spam / Supplier) зводяться до них автоматично.
 
 ### Telegram-бот (n8n)
 
@@ -70,6 +71,20 @@
 ```
 
 `status` приймає назву статусу (`Follow-up`), код (`follow_up`) або старі назви з таблиць. Невідомий статус → відповідь 400 зі списком дозволених. Якщо бот надіслав статус раніше, ніж лід потрапив у дашборд, лід буде підтягнуто з Meta автоматично.
+
+Щоб дашборд оновлював картку в Telegram, коли статус змінили з кнопки, додайте в тіло `chat_id` і `message_id` картки, на якій натиснули: дашборд оновить решту карток цього ліда (група / особистий чат).
+
+**Новий лід з бота.** Одразу після відправки картки n8n викликає `POST /api/leads/ingest` (той самий `Authorization: Bearer <LEADS_API_TOKEN>`):
+
+```json
+{
+  "lead_id": "1977622026500180",
+  "lead": { "full_name": "…", "phone": "…", "email": "…", "city": "…", "form_id": "…", "form_name": "…", "created_time": "…", "answers": {} },
+  "telegram": { "chat_id": "-5398273801", "message_id": 178, "text": "<html картки>", "reply_markup": { "inline_keyboard": [] } }
+}
+```
+
+Лід підтягується з Meta з повною атрибуцією реклами; якщо Meta недоступна — зберігаються дані з `lead`. Повторний виклик нічого не дублює. `telegram` запамʼятовує картку: коли статус змінюють у CRM, дашборд дописує в усі картки ліда блок «📋 Статус / 👤 Обновил / 🕒 Обновлено» у форматі бота. Для цього потрібен токен того ж бота у змінній `TELEGRAM_LEADS_BOT_TOKEN`.
 
 ### Жива синхронізація з Google Таблицями (необовʼязково)
 

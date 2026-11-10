@@ -339,3 +339,23 @@ export type AiInsight = {
   expectedEffect?: string;
   confidence: "high" | "medium" | "low";
 };
+
+/**
+ * Telegram cards the bot (n8n) posted for a lead. Kept so a status change made in the CRM
+ * can be written back into every card, in the same format the bot uses.
+ */
+export const leadTelegramMessages = pgTable(
+  "lead_telegram_messages",
+  {
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    chatId: text("chat_id").notNull(),
+    messageId: integer("message_id").notNull(),
+    /** Card text exactly as first sent (HTML), without status blocks. */
+    baseText: text("base_text").notNull(),
+    replyMarkup: jsonb("reply_markup"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.chatId, t.messageId] }), index("lead_tg_lead_idx").on(t.leadId)],
+);

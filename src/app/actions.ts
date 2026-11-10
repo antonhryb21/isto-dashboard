@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { addComment, setLeadFields } from "@/lib/leads";
+import { syncTelegramCards } from "@/lib/telegram-cards";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
 import { writeBackLead, discoverSources } from "@/lib/sheets/sync";
 import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
@@ -49,6 +50,15 @@ export async function updateLeadAction(_: ActionResult | null, form: FormData): 
       if (!res.ok) message = `Збережено в CRM, але не в таблиці: ${res.message}`;
     } catch (e) {
       message = `Збережено в CRM, але не в таблиці: ${e instanceof Error ? e.message : e}`;
+    }
+  }
+  if (statusChanged) {
+    // Write the new status into the lead's Telegram cards, like a button press would.
+    try {
+      const res = await syncTelegramCards(id);
+      if ("errors" in res && res.errors?.length) message = [message, `Telegram: ${res.errors[0]}`].filter(Boolean).join(" · ");
+    } catch (e) {
+      message = [message, `Telegram: ${e instanceof Error ? e.message : e}`].filter(Boolean).join(" · ");
     }
   }
   revalidatePath("/crm");
