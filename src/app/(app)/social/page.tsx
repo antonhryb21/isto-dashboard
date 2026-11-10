@@ -203,7 +203,12 @@ function PostCard({ p }: { p: Post }) {
       <div className="flex flex-1 flex-col p-2.5">
         {p.caption ? <p className="line-clamp-2 text-[12px] leading-snug">{p.caption}</p> : <p className="text-[12px] text-faint">Без підпису</p>}
         <div className="mt-auto grid grid-cols-3 gap-y-1 pt-2 text-[11px]">
-          <M icon={<Eye size={11} />} v={p.reach} title={p.platform === "fb" ? "Охоплення (унікальні глядачі)" : "Охоплення"} />
+          {/* Meta's new FB "unique viewers" often comes back 0 even when the post has views: show "—", not a misleading zero. */}
+          <M
+            icon={<Eye size={11} />}
+            v={p.platform === "fb" && !p.reach && (p.views ?? 0) > 0 ? null : p.reach}
+            title={p.platform === "fb" ? "Охоплення (унікальні глядачі). Meta поки часто не віддає його для постів сторінки" : "Охоплення"}
+          />
           <M icon={<Heart size={11} />} v={p.likes} title="Вподобання" />
           <M icon={<MessageCircle size={11} />} v={p.comments} title="Коментарі" />
           {p.platform === "ig" ? (
