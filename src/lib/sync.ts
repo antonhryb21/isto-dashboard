@@ -78,6 +78,8 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
   await ensureSeed();
 
   if (kind === "quick") {
+    // New leads first: until the Page is subscribed to the leadgen webhook this is how they arrive.
+    await step("metaLeads", () => syncMetaLeads(1));
     await step("insights", () => syncInsights(day(2), day(0)));
     if (sheetsEnabled()) await step("sheets", () => importAllSources());
     await step("instagram", () => syncInstagram(7));
