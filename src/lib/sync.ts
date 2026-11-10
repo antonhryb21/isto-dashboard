@@ -52,17 +52,27 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
   const started = Date.now();
   const BUDGET_MS = 240_000;
   const step = async (name: string, fn: () => Promise<unknown>) => {
-    if (Date.now() - started > BUDGET_MS) {
+    const left = BUDGET_MS - (Date.now() - started);
+    if (left <= 5_000) {
       report[name] = { skipped: "не вистачило часу — підтягнеться наступним оновленням" };
       return;
     }
     const t0 = Date.now();
+    // A single slow step must not take the whole run down with it: stop waiting when the budget is spent.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`крок не вклався в ліміт часу (${Math.round(left / 1000)} с)`)), left);
+    });
     try {
-      const r = await fn();
+      const r = await Promise.race([fn(), timeout]);
       report[name] = r && typeof r === "object" ? { ...(r as object), seconds: Math.round((Date.now() - t0) / 1000) } : r;
     } catch (e) {
-      report[name] = { error: e instanceof Error ? e.message : String(e) };
+      report[name] = { error: e instanceof Error ? e.message : String(e), seconds: Math.round((Date.now() - t0) / 1000) };
+    } finally {
+      clearTimeout(timer);
     }
+    // Progress is saved after every step, so an interrupted run still shows how far it got.
+    await db.update(syncRuns).set({ message: JSON.stringify(report).slice(0, 4000) }).where(eq(syncRuns.id, run.id));
   };
 
   await ensureSeed();
@@ -198,5 +208,17 @@ export function runNotes(run: { message: string | null } | null): string[] {
     return out;
   } catch {
     return [];
+  }
+}
+
+/** "Статистика реклами (12 с), Ліди з Meta (3 с)" — steps already finished in a run's saved progress. */
+export function stepsDone(message: string) {
+  try {
+    const report = JSON.parse(message) as Record<string, { seconds?: number; error?: string }>;
+    return Object.entries(report)
+      .map(([k, v]) => `${STEP_LABEL[k] ?? k}${v?.error ? " (помилка)" : v?.seconds !== undefined ? ` (${v.seconds} с)` : ""}`)
+      .join(", ");
+  } catch {
+    return "";
   }
 }

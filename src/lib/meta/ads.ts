@@ -1,5 +1,5 @@
 import "server-only";
-import { sql, inArray } from "drizzle-orm";
+import { and, gt, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { upsertMany } from "@/db/upsert";
 import { ads, adInsightsDaily, campaigns, socialPosts } from "@/db/schema";
@@ -45,6 +45,60 @@ async function currencyOf(accountId: string) {
   return accountCurrency.get(accountId)!;
 }
 
+type ApiAd = {
+  id: string;
+  name: string;
+  effective_status?: string;
+  campaign_id?: string;
+  adset?: { id: string; name: string };
+  created_time?: string;
+  preview_shareable_link?: string;
+  creative?: {
+    id: string;
+    thumbnail_url?: string;
+    image_url?: string;
+    video_id?: string;
+    body?: string;
+    title?: string;
+    object_type?: string;
+    effective_instagram_media_id?: string;
+    effective_object_story_id?: string;
+    instagram_permalink_url?: string;
+  };
+};
+
+const AD_FIELDS =
+  "id,name,effective_status,campaign_id,adset{id,name},created_time,preview_shareable_link," +
+  "creative.thumbnail_width(720).thumbnail_height(720){id,thumbnail_url,image_url,video_id,body,title,object_type," +
+  "effective_instagram_media_id,effective_object_story_id,instagram_permalink_url}";
+
+function adRow(a: ApiAd, accountId: string) {
+  const cr = a.creative;
+  return {
+    id: a.id,
+    accountId,
+    campaignId: a.campaign_id ?? null,
+    adsetId: a.adset?.id ?? null,
+    adsetName: a.adset?.name ?? null,
+    name: a.name,
+    status: a.effective_status ?? null,
+    createdTime: a.created_time ? new Date(a.created_time) : null,
+    creativeId: cr?.id ?? null,
+    thumbnailUrl: cr?.thumbnail_url ?? null,
+    imageUrl: cr?.image_url ?? null,
+    videoId: cr?.video_id ?? null,
+    body: cr?.body ?? null,
+    title: cr?.title ?? null,
+    objectType: cr?.object_type ?? null,
+    instagramMediaId: cr?.effective_instagram_media_id ?? null,
+    pagePostId: cr?.effective_object_story_id ?? null,
+    permalink:
+      cr?.instagram_permalink_url ?? (cr?.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null),
+    previewLink: a.preview_shareable_link ?? null,
+    updatedAt: new Date(),
+  };
+}
+
 /** Campaigns and ads (with creative) for every ISTO ad account. */
 export async function syncAdStructure(opts: { all?: boolean } = {}) {
   const allRegions = await listRegions();
@@ -70,71 +124,40 @@ export async function syncAdStructure(opts: { all?: boolean } = {}) {
       { key: (r) => r.id },
     );
 
-    type ApiAd = {
-      id: string;
-      name: string;
-      effective_status?: string;
-      campaign_id?: string;
-      adset?: { id: string; name: string };
-      created_time?: string;
-      preview_shareable_link?: string;
-      creative?: {
-        id: string;
-        thumbnail_url?: string;
-        image_url?: string;
-        video_id?: string;
-        body?: string;
-        title?: string;
-        object_type?: string;
-        effective_instagram_media_id?: string;
-        effective_object_story_id?: string;
-        instagram_permalink_url?: string;
-      };
-    };
-    const list = await graphAll<ApiAd>(`act_${accountId}/ads`, {
-      fields:
-        "id,name,effective_status,campaign_id,adset{id,name},created_time,preview_shareable_link," +
-        "creative.thumbnail_width(720).thumbnail_height(720){id,thumbnail_url,image_url,video_id,body,title,object_type," +
-        "effective_instagram_media_id,effective_object_story_id,instagram_permalink_url}",
-      limit: 200,
-      // Daily runs skip archived and deleted ads (most of the history); the history load takes them all.
-      ...(opts.all
-        ? {}
-        : {
-            filtering: JSON.stringify([
-              { field: "effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED"] },
-            ]),
-          }),
-    });
+    if (opts.all) {
+      const list = await graphAll<ApiAd>(`act_${accountId}/ads`, { fields: AD_FIELDS, limit: 200 });
+      adCount += await upsertMany(ads, list.map((a) => adRow(a, accountId)), ads.id, { chunk: 300, key: (r) => r.id });
+    }
+  }
 
-    const adRows = list.map((a) => {
-      const cr = a.creative;
-      return {
-        id: a.id,
-        accountId,
-        campaignId: a.campaign_id ?? null,
-        adsetId: a.adset?.id ?? null,
-        adsetName: a.adset?.name ?? null,
-        name: a.name,
-        status: a.effective_status ?? null,
-        createdTime: a.created_time ? new Date(a.created_time) : null,
-        creativeId: cr?.id ?? null,
-        thumbnailUrl: cr?.thumbnail_url ?? null,
-        imageUrl: cr?.image_url ?? null,
-        videoId: cr?.video_id ?? null,
-        body: cr?.body ?? null,
-        title: cr?.title ?? null,
-        objectType: cr?.object_type ?? null,
-        instagramMediaId: cr?.effective_instagram_media_id ?? null,
-        pagePostId: cr?.effective_object_story_id ?? null,
-        permalink:
-          cr?.instagram_permalink_url ??
-          (cr?.effective_object_story_id ? `https://www.facebook.com/${cr.effective_object_story_id}` : null),
-        previewLink: a.preview_shareable_link ?? null,
-        updatedAt: new Date(),
-      };
-    });
-    adCount += await upsertMany(ads, adRows, ads.id, { chunk: 300, key: (r) => r.id });
+  // Daily: only ads that were shown in the last 35 days, fetched by id (50 per request). Listing every
+  // paused ad with its creative took longer than Vercel's 5-minute limit.
+  if (!opts.all) {
+    const since = new Date(Date.now() - 35 * 86_400_000).toISOString().slice(0, 10);
+    const recent = await db
+      .selectDistinct({ id: adInsightsDaily.adId, accountId: adInsightsDaily.accountId })
+      .from(adInsightsDaily)
+      .where(and(gte(adInsightsDaily.date, since), gt(adInsightsDaily.impressions, 0)));
+    const accountOf = new Map(recent.map((r) => [r.id, r.accountId]));
+    const ids = [...accountOf.keys()];
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      // One deleted ad fails the whole ?ids= request: then fetch that chunk one by one.
+      let got: ApiAd[];
+      try {
+        got = Object.values(await graph<Record<string, ApiAd>>("", { ids: chunk.join(","), fields: AD_FIELDS }));
+      } catch {
+        got = [];
+        for (const id of chunk) {
+          try {
+            got.push(await graph<ApiAd>(id, { fields: AD_FIELDS }));
+          } catch {
+            /* deleted or not accessible: keep what we have */
+          }
+        }
+      }
+      adCount += await upsertMany(ads, got.map((a) => adRow(a, accountOf.get(a.id) ?? "")), ads.id, { key: (r) => r.id });
+    }
   }
 
   // Mark organic posts that were promoted with an ad.

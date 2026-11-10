@@ -12,7 +12,7 @@ import { listCompetitors } from "@/lib/competitors";
 import { listTargets, monthBounds } from "@/lib/targets";
 import { minutesSince } from "@/lib/dates";
 import { fmtInt, fmtMoney } from "@/lib/format";
-import { explainError, runNotes, runProblems, sheetsEnabled } from "@/lib/sync";
+import { explainError, runNotes, runProblems, sheetsEnabled, stepsDone } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
@@ -90,11 +90,14 @@ export default async function AdminPage() {
                 <td>{{ quick: "швидке", daily: "щоденне", backfill: "історія" }[r.kind] ?? r.kind}</td>
                 <td className="max-w-2xl">
                   {r.finishedAt === null ? (
-                    minutesSince(r.startedAt) > 6 ? (
-                      <span className="text-bad">перервано: не вклалось у ліміт часу Vercel (5 хв)</span>
-                    ) : (
-                      <span className="text-muted">триває…</span>
-                    )
+                    <div className="flex flex-col gap-0.5">
+                      {minutesSince(r.startedAt) > 6 ? (
+                        <span className="text-bad">перервано: не вклалось у ліміт часу Vercel (5 хв)</span>
+                      ) : (
+                        <span className="text-muted">триває…</span>
+                      )}
+                      {r.message && <span className="text-[12px] text-faint">готово: {stepsDone(r.message)}</span>}
+                    </div>
                   ) : r.ok ? (
                     <div className="flex flex-col gap-0.5">
                       <span className="text-good">успішно</span>
