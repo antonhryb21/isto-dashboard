@@ -94,13 +94,15 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
   }
   if (kind === "backfill") {
     const months = Math.min(opts.months ?? 12, 36);
+    // Leads first: they are what the team works with; ads history can continue on the next click.
+    await step("metaLeads", () => syncMetaLeads(90));
     // Resumable: continue below the oldest day already loaded, month by month, until the time budget runs out.
     const [oldest] = await db.select({ d: sql<string | null>`min(${adInsightsDaily.date})` }).from(adInsightsDaily);
     const oldestDays = oldest?.d ? Math.floor((Date.now() - Date.parse(String(oldest.d))) / 86_400_000) : 0;
     let m = Math.max(0, Math.floor(oldestDays / 30) - 1);
     const errors: unknown[] = [];
     let loadedTo: string | null = null;
-    for (; m < months && Date.now() - started < 180_000; m++) {
+    for (; m < months && Date.now() - started < 170_000; m++) {
       const until = day(m * 30);
       const since = day(m * 30 + 29);
       try {
@@ -119,7 +121,6 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("structure", () => syncAdStructure({ all: true }));
     await step("instagram", () => syncInstagram(120));
     await step("facebook", () => syncFacebook(120, 1000));
-    await step("metaLeads", () => syncMetaLeads(90));
     await step("competitors", () => syncCompetitors(10));
     if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
