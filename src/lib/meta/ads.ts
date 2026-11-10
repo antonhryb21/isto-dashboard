@@ -1,6 +1,7 @@
 import "server-only";
 import { sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
+import { upsertMany } from "@/db/upsert";
 import { ads, adInsightsDaily, campaigns, socialPosts } from "@/db/schema";
 import { META } from "@/lib/config";
 import { detectRegion, listRegions } from "@/lib/regions";
@@ -45,7 +46,7 @@ async function currencyOf(accountId: string) {
 }
 
 /** Campaigns and ads (with creative) for every ISTO ad account. */
-export async function syncAdStructure() {
+export async function syncAdStructure(opts: { all?: boolean } = {}) {
   const allRegions = await listRegions();
   let adCount = 0;
 
@@ -54,8 +55,9 @@ export async function syncAdStructure() {
       `act_${accountId}/campaigns`,
       { fields: "id,name,objective,effective_status", limit: 200 },
     );
-    for (const c of camps) {
-      const values = {
+    await upsertMany(
+      campaigns,
+      camps.map((c) => ({
         id: c.id,
         accountId,
         name: c.name,
@@ -63,9 +65,10 @@ export async function syncAdStructure() {
         status: c.effective_status ?? null,
         regionCode: detectRegion(allRegions, c.name),
         updatedAt: new Date(),
-      };
-      await db.insert(campaigns).values(values).onConflictDoUpdate({ target: campaigns.id, set: values });
-    }
+      })),
+      campaigns.id,
+      { key: (r) => r.id },
+    );
 
     type ApiAd = {
       id: string;
@@ -93,12 +96,20 @@ export async function syncAdStructure() {
         "id,name,effective_status,campaign_id,adset{id,name},created_time,preview_shareable_link," +
         "creative.thumbnail_width(720).thumbnail_height(720){id,thumbnail_url,image_url,video_id,body,title,object_type," +
         "effective_instagram_media_id,effective_object_story_id,instagram_permalink_url}",
-      limit: 100,
+      limit: 200,
+      // Daily runs skip archived and deleted ads (most of the history); the history load takes them all.
+      ...(opts.all
+        ? {}
+        : {
+            filtering: JSON.stringify([
+              { field: "effective_status", operator: "IN", value: ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED"] },
+            ]),
+          }),
     });
 
-    for (const a of list) {
+    const adRows = list.map((a) => {
       const cr = a.creative;
-      const values = {
+      return {
         id: a.id,
         accountId,
         campaignId: a.campaign_id ?? null,
@@ -122,9 +133,8 @@ export async function syncAdStructure() {
         previewLink: a.preview_shareable_link ?? null,
         updatedAt: new Date(),
       };
-      await db.insert(ads).values(values).onConflictDoUpdate({ target: ads.id, set: values });
-      adCount++;
-    }
+    });
+    adCount += await upsertMany(ads, adRows, ads.id, { chunk: 300, key: (r) => r.id });
   }
 
   // Mark organic posts that were promoted with an ad.
@@ -161,8 +171,7 @@ export async function syncInsights(since: string, until: string) {
       fields: "date_start,ad_id,adset_id,campaign_id,spend,impressions,reach,clicks,inline_link_clicks,actions",
       limit: 500,
     });
-    for (const r of data) {
-      const values = {
+    const insightRows = data.map((r) => ({
         date: r.date_start,
         adId: r.ad_id,
         accountId,
@@ -177,13 +186,8 @@ export async function syncInsights(since: string, until: string) {
         leads: leadsFromActions(r.actions),
         ...engagementFromActions(r.actions),
         updatedAt: new Date(),
-      };
-      await db
-        .insert(adInsightsDaily)
-        .values(values)
-        .onConflictDoUpdate({ target: [adInsightsDaily.date, adInsightsDaily.adId], set: values });
-      rows++;
-    }
+    }));
+    rows += await upsertMany(adInsightsDaily, insightRows, [adInsightsDaily.date, adInsightsDaily.adId], { key: (r) => `${r.date}|${r.adId}` });
   }
   return { rows };
 }

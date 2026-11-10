@@ -2,6 +2,7 @@ import "server-only";
 import { localDate } from "@/lib/dates";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import { upsertMany } from "@/db/upsert";
 import { competitorPosts, competitorSnapshots, competitors } from "@/db/schema";
 import { META } from "@/lib/config";
 import { graph } from "./client";
@@ -96,23 +97,20 @@ export async function syncCompetitors(pages = 2) {
             .values({ username: c.username, date: today(), ...snap })
             .onConflictDoUpdate({ target: [competitorSnapshots.username, competitorSnapshots.date], set: snap });
         }
-        for (const m of d.media?.data ?? []) {
-          const values = {
-            id: m.id,
-            username: c.username,
-            contentType: contentType(m),
-            caption: m.caption ?? null,
-            mediaUrl: m.media_url ?? null,
-            thumbnailUrl: m.thumbnail_url ?? (m.media_type === "VIDEO" ? null : (m.media_url ?? null)),
-            permalink: m.permalink ?? null,
-            publishedAt: new Date(m.timestamp),
-            likes: m.like_count ?? null,
-            comments: m.comments_count ?? null,
-            updatedAt: new Date(),
-          };
-          await db.insert(competitorPosts).values(values).onConflictDoUpdate({ target: competitorPosts.id, set: values });
-          posts++;
-        }
+        const postRows = (d.media?.data ?? []).map((m) => ({
+          id: m.id,
+          username: c.username,
+          contentType: contentType(m),
+          caption: m.caption ?? null,
+          mediaUrl: m.media_url ?? null,
+          thumbnailUrl: m.thumbnail_url ?? (m.media_type === "VIDEO" ? null : (m.media_url ?? null)),
+          permalink: m.permalink ?? null,
+          publishedAt: new Date(m.timestamp),
+          likes: m.like_count ?? null,
+          comments: m.comments_count ?? null,
+          updatedAt: new Date(),
+        }));
+        posts += await upsertMany(competitorPosts, postRows, competitorPosts.id, { key: (r) => r.id });
         after = d.media?.paging?.next ? d.media.paging.cursors?.after : undefined;
         if (!after) break;
       }

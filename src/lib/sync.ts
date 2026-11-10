@@ -1,8 +1,8 @@
 import "server-only";
 import { daysAgo } from "@/lib/dates";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { competitors, regions, syncRuns } from "@/db/schema";
+import { adInsightsDaily, competitors, regions, syncRuns } from "@/db/schema";
 import { DEFAULT_COMPETITORS, DEFAULT_LEAD_SPREADSHEETS, DEFAULT_REGIONS } from "@/lib/config";
 import { syncCompetitors } from "@/lib/meta/competitors";
 import { syncAdStructure, syncInsights } from "@/lib/meta/ads";
@@ -48,9 +48,18 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
 
   const [run] = await db.insert(syncRuns).values({ kind }).returning();
   const report: Record<string, unknown> = {};
+  // Vercel stops a function after 300 s; leave room to record the result instead of being cut off mid-way.
+  const started = Date.now();
+  const BUDGET_MS = 240_000;
   const step = async (name: string, fn: () => Promise<unknown>) => {
+    if (Date.now() - started > BUDGET_MS) {
+      report[name] = { skipped: "не вистачило часу — підтягнеться наступним оновленням" };
+      return;
+    }
+    const t0 = Date.now();
     try {
-      report[name] = await fn();
+      const r = await fn();
+      report[name] = r && typeof r === "object" ? { ...(r as object), seconds: Math.round((Date.now() - t0) / 1000) } : r;
     } catch (e) {
       report[name] = { error: e instanceof Error ? e.message : String(e) };
     }
@@ -64,28 +73,40 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(7));
   }
   if (kind === "daily") {
-    await step("structure", () => syncAdStructure());
+    // Most important first: if time runs out, the tail waits for the next run.
     await step("insights", () => syncInsights(day(30), day(0)));
+    await step("metaLeads", () => syncMetaLeads(3));
+    await step("structure", () => syncAdStructure());
     await step("instagram", () => syncInstagram(30));
     await step("facebook", () => syncFacebook(30));
-    await step("metaLeads", () => syncMetaLeads(3));
     await step("competitors", () => syncCompetitors(2));
     if (sheetsEnabled()) await step("sheets", () => importAllSources());
   }
   if (kind === "backfill") {
     const months = Math.min(opts.months ?? 12, 36);
-    await step("structure", () => syncAdStructure());
-    const chunks: unknown[] = [];
-    for (let m = 0; m < months; m++) {
+    // Resumable: continue below the oldest day already loaded, month by month, until the time budget runs out.
+    const [oldest] = await db.select({ d: sql<string | null>`min(${adInsightsDaily.date})` }).from(adInsightsDaily);
+    const oldestDays = oldest?.d ? Math.floor((Date.now() - Date.parse(String(oldest.d))) / 86_400_000) : 0;
+    let m = Math.max(0, Math.floor(oldestDays / 30) - 1);
+    const errors: unknown[] = [];
+    let loadedTo: string | null = null;
+    for (; m < months && Date.now() - started < 180_000; m++) {
       const until = day(m * 30);
       const since = day(m * 30 + 29);
       try {
-        chunks.push(await syncInsights(since, until));
+        await syncInsights(since, until);
+        loadedTo = since;
       } catch (e) {
-        chunks.push({ since, error: e instanceof Error ? e.message : String(e) });
+        errors.push({ since, error: e instanceof Error ? e.message : String(e) });
       }
     }
-    report.insights = chunks;
+    report.insights = {
+      ...(errors.length ? { error: JSON.stringify(errors).slice(0, 500) } : {}),
+      loadedTo,
+      done: m >= months,
+      ...(m < months ? { note: `історію завантажено до ${loadedTo ?? "—"}; натисніть «Завантажити історію» ще раз, щоб продовжити` } : {}),
+    };
+    await step("structure", () => syncAdStructure({ all: true }));
     await step("instagram", () => syncInstagram(120));
     await step("facebook", () => syncFacebook(120, 1000));
     await step("metaLeads", () => syncMetaLeads(90));
@@ -159,4 +180,23 @@ export function runProblems(run: { ok: boolean | null; message: string | null } 
   // Same cause in every step (e.g. no token): say it once.
   const seen = new Set<string>();
   return out.filter((p) => (seen.has(p.error) ? false : (seen.add(p.error), true)));
+}
+
+/** Non-error remarks of a run: steps skipped for time, history still to load. */
+export function runNotes(run: { message: string | null } | null): string[] {
+  if (!run?.message) return [];
+  try {
+    const report = JSON.parse(run.message) as Record<string, unknown>;
+    const out: string[] = [];
+    for (const [k, v] of Object.entries(report)) {
+      if (v && typeof v === "object") {
+        const o = v as { skipped?: unknown; note?: unknown };
+        if (typeof o.note === "string") out.push(o.note);
+        if (typeof o.skipped === "string") out.push(`${STEP_LABEL[k] ?? k}: ${o.skipped}`);
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }

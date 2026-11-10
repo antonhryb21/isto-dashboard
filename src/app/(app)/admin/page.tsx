@@ -10,8 +10,9 @@ import { CsvImport } from "@/components/csv-import";
 import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
 import { listCompetitors } from "@/lib/competitors";
 import { listTargets, monthBounds } from "@/lib/targets";
+import { minutesSince } from "@/lib/dates";
 import { fmtInt, fmtMoney } from "@/lib/format";
-import { explainError, runProblems, sheetsEnabled } from "@/lib/sync";
+import { explainError, runNotes, runProblems, sheetsEnabled } from "@/lib/sync";
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
@@ -89,9 +90,20 @@ export default async function AdminPage() {
                 <td>{{ quick: "швидке", daily: "щоденне", backfill: "історія" }[r.kind] ?? r.kind}</td>
                 <td className="max-w-2xl">
                   {r.finishedAt === null ? (
-                    <span className="text-muted">триває…</span>
+                    minutesSince(r.startedAt) > 6 ? (
+                      <span className="text-bad">перервано: не вклалось у ліміт часу Vercel (5 хв)</span>
+                    ) : (
+                      <span className="text-muted">триває…</span>
+                    )
                   ) : r.ok ? (
-                    <span className="text-good">успішно</span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-good">успішно</span>
+                      {runNotes(r).map((n) => (
+                        <span key={n} className="text-[12px] text-muted">
+                          {n}
+                        </span>
+                      ))}
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-0.5">
                       {runProblems(r).map((p) => (
