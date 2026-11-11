@@ -1,29 +1,25 @@
 import "server-only";
 import { createHmac } from "node:crypto";
 import { META } from "@/lib/config";
-import type { StatusCode } from "@/lib/statuses";
+import { STATUSES, STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 
 /**
  * Sends lead stages back to Meta (Conversions API for CRM), so that campaigns can be optimised for
  * leads that turn out to be real instead of the cheapest form fills.
  *
- * Off until META_CRM_DATASET_ID (the dataset / pixel connected to the lead forms in Events Manager) is set.
- * Only the Meta lead id and the stage are sent: no name, phone or email.
+ * Off until META_CRM_DATASET_ID (the CRM dataset in Events Manager) is set. Only the Meta lead id
+ * and the stage are sent: no name, phone or email. A stage goes out when someone changes the status
+ * in the CRM or through the bot; a bulk import of old statuses stays silent, since Meta only accepts
+ * events from the last few days anyway.
  */
-const STAGE: Partial<Record<StatusCode, string>> = {
-  contacted: "Contacted",
-  follow_up: "Contacted",
-  meeting: "Meeting",
-  proposal: "Proposal sent",
-  won: "Won",
-  not_relevant: "Not relevant",
-  spam: "Not relevant",
-  supplier: "Not relevant",
-  lost: "Lost",
-};
 
-/** The stage names this dashboard sends, so they can be checked against events already in a dataset. */
-export const CRM_STAGE_NAMES = [...new Set(Object.values(STAGE))] as string[];
+/**
+ * The stage keeps the name the CRM uses in Google Sheets, so a dataset that used to be fed from the
+ * sheet carries on with one history instead of a second set of stage names beside the first.
+ */
+const stageName = (status: StatusCode) => STATUS_BY_CODE[status]?.label ?? null;
+
+export const CRM_STAGE_NAMES = STATUSES.map((s) => s.label);
 
 export const crmEventsEnabled = () => Boolean(process.env.META_CRM_DATASET_ID && process.env.META_SYSTEM_USER_TOKEN);
 
@@ -57,7 +53,7 @@ export async function checkCrmDataset(): Promise<{ ok: boolean; name?: string; e
 export async function sendLeadStage(metaLeadId: string | null, status: StatusCode) {
   const dataset = process.env.META_CRM_DATASET_ID;
   const token = process.env.META_SYSTEM_USER_TOKEN;
-  const stage = STAGE[status];
+  const stage = stageName(status);
   if (!dataset || !token || !stage || !metaLeadId || !/^\d{10,20}$/.test(metaLeadId)) return { sent: false as const };
 
   const body = new URLSearchParams({
