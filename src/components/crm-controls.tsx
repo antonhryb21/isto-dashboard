@@ -23,7 +23,7 @@ export function StatusSelect({ id, status, disabled }: { id: string; status: str
   return (
     <div className="flex flex-col">
       <select
-        className="input w-36 py-1 text-[12.5px]"
+        className="input w-32 py-1 text-[12.5px]"
         style={{ borderLeft: `3px solid ${STATUS_BY_CODE[value as StatusCode]?.color ?? "#64748b"}` }}
         value={value}
         disabled={pending}
@@ -57,7 +57,7 @@ export function OwnerSelect({ id, owner, owners, disabled }: { id: string; owner
   const options = value && !owners.includes(value) ? [value, ...owners] : owners;
   return (
     <select
-      className={`input w-36 py-1 text-[12.5px] ${value ? "" : "text-faint"}`}
+      className={`input w-32 py-1 text-[12.5px] ${value ? "" : "text-faint"}`}
       value={value}
       disabled={pending}
       aria-label="Відповідальний"

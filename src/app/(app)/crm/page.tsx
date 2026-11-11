@@ -187,10 +187,10 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                     <LeadContact l={l} />
                   </td>
                   <td className="text-muted">{l.regionCode ? regionName[l.regionCode] ?? l.regionCode : "—"}</td>
-                  <td className="max-w-64 truncate text-muted" title={Object.values(leadContact(l).interest).join(" · ")}>
+                  <td className="max-w-44 truncate text-muted" title={Object.values(leadContact(l).interest).join(" · ")}>
                     {Object.values(leadContact(l).interest).slice(0, 2).join(" · ") || "—"}
                   </td>
-                  <td className="max-w-56 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
+                  <td className="max-w-40 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
                     {l.isOrganic ? "органіка" : l.campaignName ?? "—"}
                   </td>
                   <td>
