@@ -7,7 +7,7 @@ import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { owners } from "@/lib/queries";
 import { workTimeLabel } from "@/lib/sla";
-import { DeleteTarget, RegionForm, RegionOwner, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
+import { CheckCrmDataset, DeleteTarget, RegionForm, RegionOwner, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
 import { CsvImport } from "@/components/csv-import";
 import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
 import { listCompetitors } from "@/lib/competitors";
@@ -18,20 +18,21 @@ import { explainError, runNotes, runProblems, sheetsEnabled, stepsDone } from "@
 
 const ROLE: Record<string, string> = { admin: "Адмін", marketing: "Маркетинг", viewer: "Керівництво" };
 
-const ENV = [
-  ["DATABASE_URL", "База даних (Neon)"],
-  ["AUTH_SECRET", "Секрет сесій"],
-  ["CRON_SECRET", "Секрет щоденної синхронізації"],
-  ["META_SYSTEM_USER_TOKEN", "Токен Meta"],
-  ["META_APP_SECRET", "App Secret Meta"],
-  ["META_WEBHOOK_VERIFY_TOKEN", "Токен вебхука лідів"],
-  ["LEADS_API_TOKEN", "Токен для Telegram-бота (n8n)"],
-  ["GOOGLE_OAUTH_CLIENT_ID", "Вхід через Google"],
-  ["ANTHROPIC_API_KEY", "AI-інсайти (необовʼязково)"],
-  ["META_CRM_DATASET_ID", "Статуси лідів назад у Meta (необовʼязково)"],
-  ["TELEGRAM_BOT_TOKEN", "Telegram-бот для звітів (необовʼязково)"],
-  ["TELEGRAM_CHAT_ID", "Чат для звітів (необовʼязково)"],
-] as const;
+/** Settings the app reads from Vercel. "optional" ones only switch a feature off when empty — they are not a fault. */
+const ENV: { key: string; label: string; optional?: string }[] = [
+  { key: "DATABASE_URL", label: "База даних (Neon)" },
+  { key: "AUTH_SECRET", label: "Секрет сесій" },
+  { key: "CRON_SECRET", label: "Секрет щоденної синхронізації" },
+  { key: "META_SYSTEM_USER_TOKEN", label: "Токен Meta" },
+  { key: "META_APP_SECRET", label: "App Secret Meta" },
+  { key: "META_WEBHOOK_VERIFY_TOKEN", label: "Токен вебхука лідів" },
+  { key: "LEADS_API_TOKEN", label: "Токен для Telegram-бота (n8n)" },
+  { key: "GOOGLE_OAUTH_CLIENT_ID", label: "Вхід через Google" },
+  { key: "ANTHROPIC_API_KEY", label: "AI-інсайти", optional: "без ключа інсайти не генеруються" },
+  { key: "META_CRM_DATASET_ID", label: "Статуси лідів назад у Meta", optional: "вимкнено — Meta не знає, які ліди стали якісними" },
+  { key: "TELEGRAM_BOT_TOKEN", label: "Telegram-бот для звітів", optional: "без токена звіт не надсилається" },
+  { key: "TELEGRAM_CHAT_ID", label: "Чат для звітів", optional: "без ID звіт нікуди не піде" },
+];
 
 export default async function AdminPage() {
   const me = await requireUser("admin");
@@ -55,18 +56,35 @@ export default async function AdminPage() {
       <section className="card p-5">
         <div className="label">Налаштування</div>
         <div className="mt-3 grid gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2">
-          {ENV.map(([k, l]) => (
-            <div key={k} className="flex items-center gap-2">
-              <span className={process.env[k] ? "text-good" : "text-bad"}>{process.env[k] ? "●" : "○"}</span>
-              <span className="text-muted">{l}</span>
-              <code className="text-[11px] text-faint">{k}</code>
-            </div>
-          ))}
+          {ENV.map(({ key, label, optional }) => {
+            const set = Boolean(process.env[key]);
+            return (
+              <div key={key} className="flex items-baseline gap-2">
+                <span className={set ? "text-good" : optional ? "text-faint" : "text-bad"}>{set ? "●" : "○"}</span>
+                <span>
+                  <span className="text-muted">{label}</span> <code className="text-[11px] text-faint">{key}</code>
+                  {!set && optional && <span className="block text-[11.5px] text-faint">{optional}</span>}
+                </span>
+              </div>
+            );
+          })}
         </div>
         <p className="mt-4 text-[12px] text-faint">
           Вебхук для лідів у Meta (App → Webhooks → Page → leadgen): <code className="text-muted">{webhookUrl}</code>, токен перевірки = значення
           META_WEBHOOK_VERIFY_TOKEN. Потім натисніть «Підписати сторінку на ліди».
         </p>
+        {process.env.META_CRM_DATASET_ID && (
+          <p className="mt-4 text-[12px] text-faint">
+            <CheckCrmDataset />
+          </p>
+        )}
+        {!process.env.META_CRM_DATASET_ID && (
+          <p className="mt-2 text-[12px] text-faint">
+            Щоб Meta оптимізувала рекламу під якісні ліди, а не під дешеві заявки: в Events Manager створіть набір даних типу CRM, у його налаштуваннях
+            візьміть ID і додайте у Vercel як META_CRM_DATASET_ID. Кампанії на ліди мають бути з оптимізацією «конверсійні ліди». Дашборд надсилає лише
+            ID ліда і новий статус — без імен, телефонів і пошти.
+          </p>
+        )}
         <p className="mt-2 text-[12px] text-faint">
           Статуси з Telegram-бота: <code className="text-muted">POST {botUrl}</code>, заголовок{" "}
           <code className="text-muted">Authorization: Bearer LEADS_API_TOKEN</code>, тіло{" "}

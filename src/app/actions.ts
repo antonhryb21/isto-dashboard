@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { sendLeadStage } from "@/lib/meta/crm-events";
+import { checkCrmDataset, sendLeadStage } from "@/lib/meta/crm-events";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
@@ -212,6 +212,13 @@ export async function setRegionOwnerAction(code: string, owner: string): Promise
   await db.update(regions).set({ defaultOwner: owner.trim().slice(0, 80) || null }).where(eq(regions.code, code));
   revalidatePath("/admin");
   return { ok: true };
+}
+
+/** Checks that META_CRM_DATASET_ID points at a dataset this token can reach. Reads only. */
+export async function checkCrmDatasetAction(): Promise<ActionResult> {
+  await requireUser("admin");
+  const r = await checkCrmDataset();
+  return r.ok ? { ok: true, message: `Звʼязок є: ${r.name}` } : { ok: false, message: r.error ?? "не вдалося перевірити" };
 }
 
 export async function addSpreadsheetAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {

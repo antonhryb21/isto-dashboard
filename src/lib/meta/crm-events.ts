@@ -24,6 +24,33 @@ const STAGE: Partial<Record<StatusCode, string>> = {
 
 export const crmEventsEnabled = () => Boolean(process.env.META_CRM_DATASET_ID && process.env.META_SYSTEM_USER_TOKEN);
 
+function proof(token: string) {
+  const secret = process.env.META_APP_SECRET;
+  return secret ? createHmac("sha256", secret).update(token).digest("hex") : null;
+}
+
+/**
+ * Read-only check that the dataset id is right and the token can reach it.
+ * Sends nothing, so it never pollutes Meta's data with a test stage.
+ */
+export async function checkCrmDataset(): Promise<{ ok: boolean; name?: string; error?: string }> {
+  const dataset = process.env.META_CRM_DATASET_ID;
+  const token = process.env.META_SYSTEM_USER_TOKEN;
+  if (!dataset) return { ok: false, error: "META_CRM_DATASET_ID не задано" };
+  if (!token) return { ok: false, error: "META_SYSTEM_USER_TOKEN не задано" };
+  const params = new URLSearchParams({ access_token: token, fields: "id,name,owner_business" });
+  const p = proof(token);
+  if (p) params.set("appsecret_proof", p);
+  try {
+    const res = await fetch(`https://graph.facebook.com/${META.apiVersion}/${dataset}?${params}`, { cache: "no-store" });
+    const json = (await res.json()) as { id?: string; name?: string; error?: { message?: string } };
+    if (json.error) return { ok: false, error: json.error.message ?? "Meta відхилила запит" };
+    return { ok: true, name: json.name ?? json.id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "немає звʼязку з Meta" };
+  }
+}
+
 export async function sendLeadStage(metaLeadId: string | null, status: StatusCode) {
   const dataset = process.env.META_CRM_DATASET_ID;
   const token = process.env.META_SYSTEM_USER_TOKEN;
@@ -42,8 +69,8 @@ export async function sendLeadStage(metaLeadId: string | null, status: StatusCod
       },
     ]),
   });
-  const secret = process.env.META_APP_SECRET;
-  if (secret) body.set("appsecret_proof", createHmac("sha256", secret).update(token).digest("hex"));
+  const p = proof(token);
+  if (p) body.set("appsecret_proof", p);
   try {
     const res = await fetch(`https://graph.facebook.com/${META.apiVersion}/${dataset}/events`, { method: "POST", body, cache: "no-store" });
     const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } };

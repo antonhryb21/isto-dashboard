@@ -11,6 +11,7 @@ import {
   saveUserAction,
   setSourceRegionAction,
   setRegionOwnerAction,
+  checkCrmDatasetAction,
   subscribeLeadgenAction,
   syncNowAction,
   toggleSourceAction,
@@ -61,6 +62,20 @@ export function RegionForm() {
       <button className="btn" disabled={pending}>Додати регіон</button>
       <Msg r={state} />
     </form>
+  );
+}
+
+/** Verifies that the CRM dataset id in Vercel really works, before anyone relies on it. */
+export function CheckCrmDataset() {
+  const [state, setState] = useState<ActionResult | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button className="btn py-1 text-[12px]" disabled={pending} onClick={() => start(async () => setState(await checkCrmDatasetAction()))}>
+        {pending ? "Перевіряю…" : "Перевірити звʼязок з Meta"}
+      </button>
+      {state && <span className={`text-[12px] ${state.ok ? "text-good" : "text-bad"}`}>{state.message}</span>}
+    </span>
   );
 }
 
