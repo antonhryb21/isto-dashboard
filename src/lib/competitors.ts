@@ -54,7 +54,10 @@ export async function competitorTable(f: Filters) {
     const own = snaps.filter((x) => x.username === c.username && x.followers !== null);
     const before = own.filter((x) => x.date <= f.from).at(-1) ?? own.find((x) => x.date >= f.from);
     const after = own.at(-1);
-    const growth = before && after && after.date > before.date ? (after.followers ?? 0) - (before.followers ?? 0) : null;
+    const measured = Boolean(before && after && after.date > before.date);
+    const growth = measured ? (after!.followers ?? 0) - (before!.followers ?? 0) : null;
+    // Growth is measured between two snapshots, which may cover less than the chosen period.
+    const growthDays = measured ? Math.round((Date.parse(after!.date) - Date.parse(before!.date)) / 86_400_000) : null;
     const followers = after?.followers ?? c.followers ?? null;
     const avgEng = posts ? (likes + comments) / posts : null;
     return {
@@ -62,6 +65,9 @@ export async function competitorTable(f: Filters) {
       followers,
       growth,
       growthPct: growth !== null && before?.followers ? growth / before.followers : null,
+      growthFrom: measured ? before!.date : null,
+      growthTo: measured ? after!.date : null,
+      growthDays,
       posts,
       perWeek: posts / (days / 7),
       reelsShare: posts ? num(s?.reels) / posts : null,

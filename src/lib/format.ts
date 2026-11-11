@@ -4,6 +4,23 @@ export const fmtInt = (n: number) => nf(0).format(Math.round(n));
 export const fmtMoney = (n: number, cur = "AED", d = 0) => `${nf(d).format(n)} ${cur}`;
 export const fmtPct = (n: number, d = 1) => `${nf(d).format(n * 100)}%`;
 
+/**
+ * Percent that stays readable when the value is tiny: a fixed 2 decimals turns +2 followers
+ * out of 138 000 into a meaningless "0,00%". Keeps about two meaningful digits instead.
+ */
+export const fmtPctAuto = (n: number) => fmtPctValue(n * 100);
+
+/** Same, for a number that is already in percent units (0.15 means 0.15%). */
+export function fmtPctValue(v: number) {
+  if (!v) return "0%";
+  const abs = Math.abs(v);
+  const d = abs >= 10 ? 0 : abs >= 1 ? 1 : abs >= 0.1 ? 2 : abs >= 0.01 ? 3 : 4;
+  // Even four decimals can round to nothing; say "about zero" instead of a row of zeros.
+  if (Number(abs.toFixed(d)) === 0) return "≈0%";
+  // No trailing zeros here: "0,003%" reads better than "0,0030%".
+  return `${new Intl.NumberFormat("uk-UA", { maximumFractionDigits: d }).format(v)}%`;
+}
+
 export function fmtCompact(n: number) {
   if (Math.abs(n) >= 1_000_000) return `${nf(1).format(n / 1_000_000)} млн`;
   if (Math.abs(n) >= 10_000) return `${nf(1).format(n / 1000)} тис`;

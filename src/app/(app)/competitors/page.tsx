@@ -5,7 +5,7 @@ import { parseFilters } from "@/lib/filters";
 import { explainError } from "@/lib/sync";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
 import { adLibraryUrl, competitorTable, followersSeries, topCompetitorPosts, type CompetitorRow } from "@/lib/competitors";
-import { ago, fmtCompact, fmtDate, fmtInt, fmtPct } from "@/lib/format";
+import { ago, fmtCompact, fmtDate, fmtInt, fmtPct, fmtPctAuto, fmtRange, plural } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, SectionTitle } from "@/components/kpi";
 import { FollowersChart } from "@/components/charts";
@@ -68,7 +68,9 @@ export default async function CompetitorsPage({ searchParams }: { searchParams: 
                 <tr>
                   <th>Акаунт</th>
                   <th className="num">Підписники</th>
-                  <th className="num">Приріст</th>
+                  <th className="num" title="Зміна підписників за період: скільки людей і скільки це відсотків від початкової кількості">
+                    Приріст
+                  </th>
                   <th className="num">Постів</th>
                   <th>На тиждень</th>
                   <th className="num">Лайки · коменти</th>
@@ -90,10 +92,19 @@ export default async function CompetitorsPage({ searchParams }: { searchParams: 
                           —
                         </span>
                       ) : (
-                        <span className={r.growth >= 0 ? "text-good" : "text-bad"}>
-                          {r.growth > 0 ? "+" : ""}
-                          {fmtInt(r.growth)}
-                          {r.growthPct !== null && <span className="ml-1 text-[11px] opacity-80">{fmtPct(r.growthPct, 2)}</span>}
+                        <span
+                          title={
+                            r.growthFrom && r.growthTo
+                              ? `${fmtRange(r.growthFrom, r.growthTo)} · ${r.growthDays} ${plural(r.growthDays ?? 0, ["день", "дні", "днів"])} даних`
+                              : undefined
+                          }
+                        >
+                          <span className={r.growth >= 0 ? "text-good" : "text-bad"}>
+                            {r.growth > 0 ? "+" : ""}
+                            {fmtInt(r.growth)}
+                          </span>
+                          {/* The sign is already on the number itself, so the share goes in brackets without one. */}
+                          {r.growthPct !== null && <span className="ml-1.5 text-[11.5px] text-muted">({fmtPctAuto(Math.abs(r.growthPct))})</span>}
                         </span>
                       )}
                     </td>

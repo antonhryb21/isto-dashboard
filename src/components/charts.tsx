@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { fmtPctValue } from "@/lib/format";
 
 const fmtDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
@@ -93,11 +94,11 @@ export function FollowersChart({
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke={p.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={fmtDay} {...axis} minTickGap={24} />
-          <YAxis {...axis} width={56} domain={["auto", "auto"]} tickFormatter={(v) => `${Number(v).toFixed(2)}%`} />
+          <YAxis {...axis} width={62} domain={["auto", "auto"]} tickFormatter={(v) => fmtPctValue(Number(v))} />
           <Tooltip
             contentStyle={{ background: p.panel, border: `1px solid ${p.line}`, borderRadius: 4, fontSize: 12, color: p.text }}
             labelFormatter={(d) => fmtDay(String(d))}
-            formatter={(v, name) => [`${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(2)}%`, name]}
+            formatter={(v, name) => [`${Number(v) > 0 ? "+" : ""}${fmtPctValue(Number(v))}`, name]}
           />
           <Legend iconType="plainline" wrapperStyle={{ fontSize: 12, color: p.text, paddingTop: 8 }} />
           {series.map((s) => (

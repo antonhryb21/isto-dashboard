@@ -4,6 +4,7 @@ import { leadFlags } from "@/lib/lead-flags";
 import { businessMinutes, isWorkingTime, slaCutoff } from "@/lib/sla";
 import { normalizeStatus, parseStatus } from "@/lib/statuses";
 import { romiMath } from "@/lib/money";
+import { fmtPctAuto, fmtPctValue } from "@/lib/format";
 import { phoneKey, platformLabel } from "@/lib/lead-source";
 
 // App timezone defaults to Asia/Dubai (UTC+4), working time Mon–Fri 9:00–19:00.
@@ -88,5 +89,21 @@ describe("manual leads", () => {
     expect(platformLabel("call")).toBe("Дзвінок");
     expect(platformLabel("ig")).toBe("Instagram");
     expect(platformLabel(null)).toBeNull();
+  });
+});
+
+describe("percent display", () => {
+  it("keeps meaning when the share is tiny", () => {
+    expect(fmtPctAuto(2 / 138074)).toBe("0,0014%"); // +2 followers out of 138 074
+    expect(fmtPctAuto(97 / 235237)).toBe("0,041%");
+    expect(fmtPctAuto(378 / 260204)).toBe("0,15%");
+    expect(fmtPctAuto(-11 / 371059)).toBe("-0,003%");
+    expect(fmtPctAuto(0.0734)).toBe("7,3%");
+    expect(fmtPctAuto(0)).toBe("0%");
+    expect(fmtPctAuto(0.0000002)).toBe("≈0%");
+  });
+  it("formats values already in percent units", () => {
+    expect(fmtPctValue(0.001)).toBe("0,001%");
+    expect(fmtPctValue(12.345)).toBe("12%");
   });
 });
