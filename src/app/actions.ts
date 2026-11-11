@@ -9,6 +9,7 @@ import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
 import { addComment, createLead, findDuplicate, setLeadFields } from "@/lib/leads";
+import { syncTelegramCards } from "@/lib/telegram-cards";
 import { LEAD_PLATFORMS } from "@/lib/lead-source";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
 import { writeBackLead, discoverSources } from "@/lib/sheets/sync";
@@ -113,7 +114,11 @@ export async function updateLeadAction(_: ActionResult | null, form: FormData): 
       message = `Збережено в CRM, але не в таблиці: ${e instanceof Error ? e.message : e}`;
     }
   }
-  if (statusChanged && status) after(() => sendLeadStage(before.metaLeadId, status));
+  if (statusChanged && status) {
+    after(() => sendLeadStage(before.metaLeadId, status));
+    // Same status in the lead's Telegram cards, as if a button had been pressed.
+    after(() => syncTelegramCards(id));
+  }
   revalidatePath("/crm");
   revalidatePath(`/crm/${id}`);
   return { ok: true, message };

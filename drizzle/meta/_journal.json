@@ -57,6 +57,13 @@
       "when": 1794388065828,
       "tag": "0007_manual_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794414038387,
+      "tag": "0008_telegram_cards",
+      "breakpoints": true
     }
   ]
 }

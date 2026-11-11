@@ -347,3 +347,22 @@ export type AiInsight = {
   expectedEffect?: string;
   confidence: "high" | "medium" | "low";
 };
+
+/**
+ * Telegram cards the lead bot (n8n) posted. Keyed by the Meta lead id, so a card can be
+ * registered before the lead itself reaches the CRM. A status change made in the CRM is
+ * written back into every card of the lead, in the bot's format.
+ */
+export const leadTelegramCards = pgTable(
+  "lead_telegram_cards",
+  {
+    chatId: text("chat_id").notNull(),
+    messageId: integer("message_id").notNull(),
+    metaLeadId: text("meta_lead_id").notNull(),
+    /** Card text as the bot first sent it (HTML), without status blocks. */
+    baseText: text("base_text").notNull(),
+    replyMarkup: jsonb("reply_markup"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.chatId, t.messageId] }), index("lead_tg_cards_lead_idx").on(t.metaLeadId)],
+);
