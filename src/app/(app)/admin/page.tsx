@@ -28,6 +28,7 @@ const ENV = [
   ["LEADS_API_TOKEN", "Токен для Telegram-бота (n8n)"],
   ["GOOGLE_OAUTH_CLIENT_ID", "Вхід через Google"],
   ["ANTHROPIC_API_KEY", "AI-інсайти (необовʼязково)"],
+  ["META_CRM_DATASET_ID", "Статуси лідів назад у Meta (необовʼязково)"],
   ["TELEGRAM_BOT_TOKEN", "Telegram-бот для звітів (необовʼязково)"],
   ["TELEGRAM_CHAT_ID", "Чат для звітів (необовʼязково)"],
 ] as const;

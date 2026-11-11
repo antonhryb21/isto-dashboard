@@ -2,8 +2,25 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
-import { adDaily, adTotals, campaignOptions, creativeTable, crmTotals, followers, leadsDaily, socialTotals, romiFor, withCurrency } from "@/lib/queries";
-import { ago, fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
+import {
+  adDaily,
+  adTotals,
+  campaignOptions,
+  creativeFatigue,
+  creativeTable,
+  crmTotals,
+  dueFollowUps,
+  followers,
+  leadsDaily,
+  overdueLeads,
+  ownerSpeed,
+  socialTotals,
+  romiFor,
+  withCurrency,
+} from "@/lib/queries";
+import { ago, fmtCompact, fmtInt, fmtMoney, fmtPct, fmtRange, plural } from "@/lib/format";
+import { MIN_SAMPLE } from "@/lib/ad-labels";
+import { SLA_MINUTES } from "@/lib/config";
 import { FilterBar } from "@/components/filter-bar";
 import { Kpi, SectionTitle } from "@/components/kpi";
 import { SpendLeadsChart } from "@/components/charts";
@@ -18,7 +35,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function Overview({ searchParams }: { searchParams: SP }) {
   const { f, currencies } = await withCurrency(parseFilters(await searchParams));
-  const [regions, camps, everSynced] = await Promise.all([listRegions(), campaignOptions(), lastOkSync()]);
+  const [regions, camps, everSynced] = await Promise.all([listRegions(), campaignOptions(f), lastOkSync()]);
   const [user, plan, ai] = await Promise.all([requireUser(), monthPacing(f), latestInsights()]);
   const [ad, adPrev, crm, crmPrev, daily, leadDays, social, socialPrev, fol, creatives] = await Promise.all([
     adTotals(f),
@@ -32,6 +49,22 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     followers(),
     creativeTable(f),
   ]);
+  const [overdue, due, byOwner, fatigue] = await Promise.all([overdueLeads(f.region), dueFollowUps(f.region), ownerSpeed(f), creativeFatigue(f.to)]);
+  const unassignedNew = byOwner.find((o) => !o.owner)?.waiting ?? 0;
+  const tired = creatives.filter((c) => c.status === "ACTIVE" && fatigue.get(c.id)?.tired).length;
+  const isAdmin = hasRole(user.role, "admin");
+  const attention = [
+    overdue.length && {
+      tone: "bad",
+      text: `${overdue.length} ${plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше ${SLA_MINUTES} хв робочого часу`,
+      href: "/crm?overdue=1",
+    },
+    due.length && { tone: "warn", text: `${due.length} ${plural(due.length, ["нагадування", "нагадування", "нагадувань"])} про повторний контакт на сьогодні`, href: "/crm?due=1" },
+    unassignedNew && { tone: "warn", text: `${unassignedNew} ${plural(unassignedNew, ["новий лід", "нові ліди", "нових лідів"])} без відповідального`, href: "/crm?owner=-&status=new" },
+    tired && { tone: "warn", text: `${tired} ${plural(tired, ["активний креатив втомився", "активні креативи втомились", "активних креативів втомились"])}: CTR за тиждень упав на 30%+`, href: "/creatives?sort=tired" },
+    !plan && isAdmin && { tone: "info", text: "План на цей місяць не задано: без нього не видно темпу бюджету й лідів", href: "/admin" },
+  ].filter(Boolean) as { tone: "bad" | "warn" | "info"; text: string; href: string }[];
+  const fewQualified = crm.qualified > 0 && crm.qualified < MIN_SAMPLE;
 
   const cur = ad.currency;
   // "0" only when there really were no results; "—" when there is nothing to compute from.
@@ -55,13 +88,15 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     byDay.set(d.date, row);
   }
   const chart = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const top = creatives.filter((c) => c.crm.qualified > 0 || c.metaLeads > 0).sort((a, b) => b.crm.qualified - a.crm.qualified || a.cpl - b.cpl).slice(0, 3);
+  // Ranked by qualified leads; until there are any, by leads the ad brought.
+  const withQualified = creatives.filter((c) => c.crm.qualified > 0).sort((a, b) => b.crm.qualified - a.crm.qualified || a.costPerQualified - b.costPerQualified);
+  const top = (withQualified.length ? withQualified : creatives.filter((c) => c.metaLeads > 0).sort((a, b) => b.metaLeads - a.metaLeads || a.cpl - b.cpl)).slice(0, 3);
 
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
         title="Огляд"
-        sub={`${f.from} — ${f.to} · порівняння з ${f.prevFrom} — ${f.prevTo}`}
+        sub={`${fmtRange(f.from, f.to)} · порівняння з ${fmtRange(f.prevFrom, f.prevTo)}`}
       />
       {!everSynced && noAds && (
         <div className="card border-bad/40 p-4 text-sm text-muted">
@@ -77,11 +112,37 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         />
       </Suspense>
 
+      {attention.length > 0 && (
+        <div className="card p-4">
+          <div className="label">Потребує уваги сьогодні</div>
+          <ul className="mt-2.5 flex flex-col gap-1.5 text-[13.5px]">
+            {attention.map((a) => (
+              <li key={a.href + a.text}>
+                <Link href={a.href} className="group flex items-center gap-2.5">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${a.tone === "bad" ? "bg-bad" : a.tone === "warn" ? "bg-warn" : "bg-faint"}`} />
+                  <span className="group-hover:text-accent">{a.text}</span>
+                  <span className="text-faint">→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Витрати" value={fmtMoney(ad.spend, cur)} current={ad.spend} previous={adPrev.spend} empty={noAds} hint={noAds ? "немає даних реклами за період" : undefined} />
         <Kpi label="Ліди (без спаму)" value={fmtInt(crmLeads)} current={crmLeads} previous={crmLeadsPrev} hint={`${fmtInt(crm.total)} усього заявок`} />
         <Kpi label="Ціна ліда" value={fmtMoney(cplReal, cur)} current={cplReal} previous={cplRealPrev} goodWhenDown empty={noAds || !crmLeads} hint={ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : undefined} />
-        <Kpi label="Ціна якісного ліда" value={fmtMoney(costQualified, cur)} current={costQualified} previous={costQualifiedPrev} goodWhenDown accent empty={noAds || !crm.qualified} hint={`${fmtInt(crm.qualified)} якісних`} />
+        <Kpi
+          label="Ціна якісного ліда"
+          value={`${fewQualified ? "≈ " : ""}${fmtMoney(costQualified, cur)}`}
+          current={fewQualified ? undefined : costQualified}
+          previous={fewQualified ? undefined : costQualifiedPrev}
+          goodWhenDown
+          accent={!fewQualified}
+          empty={noAds || !crm.qualified}
+          hint={fewQualified ? `лише ${fmtInt(crm.qualified)} якісних — орієнтир, не результат` : `${fmtInt(crm.qualified)} якісних`}
+        />
         <Kpi label="Зустрічі" value={fmtInt(crm.meetings)} current={crm.meetings} previous={crmPrev.meetings} />
         <Kpi label="Угоди" value={fmtInt(crm.won)} current={crm.won} previous={crmPrev.won} hint={money.revenue ? `виручка ${fmtMoney(money.revenue, cur)}` : undefined} />
         <Kpi label="CTR · CPM" value={fmtPct(ad.ctr, 2)} current={ad.ctr} previous={adPrev.ctr} empty={noAds} hint={noAds ? undefined : `CPM ${fmtMoney(ad.cpm, cur, 1)}`} />
@@ -106,7 +167,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           daysInMonth={plan.daysInMonth}
           currency={plan.currency}
           items={plan.mixedCurrency ? plan.items.filter((p) => p.key !== "budget") : plan.items}
-          canEdit={hasRole(user.role, "admin")}
+          canEdit={isAdmin}
         />
       )}
 
@@ -118,16 +179,14 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
               усі інсайти ({ai.insights.length}) · {ago(ai.createdAt)} →
             </Link>
           </div>
-          <p className="mt-2 text-[13.5px] leading-relaxed">{ai.summary}</p>
+          <p className="mt-2 line-clamp-3 text-[13.5px] leading-relaxed">{ai.summary}</p>
           <ul className="mt-3 flex flex-col gap-1.5 text-[13px]">
             {ai.insights.slice(0, 3).map((i) => (
               <li key={i.title} className="flex gap-2">
                 <span className={`shrink-0 text-[11px] uppercase tracking-[0.06em] ${SEVERITY[i.severity]?.cls.split(" ").slice(1).join(" ")}`}>
                   {SEVERITY[i.severity]?.label}
                 </span>
-                <span>
-                  {i.title} <span className="text-muted">— {i.action}</span>
-                </span>
+                <span>{i.title}</span>
               </li>
             ))}
           </ul>
@@ -147,7 +206,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       <div className="grid gap-3 lg:grid-cols-3">
         <div className="card p-5 lg:col-span-2">
           <div className="flex items-baseline justify-between">
-            <div className="label">Найкращі креативи за якісними лідами</div>
+            <div className="label">{withQualified.length ? "Найкращі креативи за якісними лідами" : "Креативи з найбільшою кількістю лідів"}</div>
             <Link href="/creatives" className="text-[12px] text-accent">усі креативи →</Link>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -163,7 +222,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                 <div className="p-3 text-[12px]">
                   <div className="truncate font-medium text-text">{c.name}</div>
                   <div className="mt-1 text-muted">
-                    {c.crm.qualified} якісних · {fmtMoney(c.spend, cur)}
+                    {withQualified.length ? `${c.crm.qualified} якісних` : `${c.metaLeads} лідів`} · {fmtMoney(c.spend, cur)}
                   </div>
                 </div>
               </div>

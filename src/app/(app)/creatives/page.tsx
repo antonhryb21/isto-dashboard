@@ -4,6 +4,7 @@ import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
 import { campaignOptions, creativeFatigue, creativeTable, withCurrency } from "@/lib/queries";
 import { fmtInt, fmtMoney, fmtPct } from "@/lib/format";
+import { MIN_SAMPLE, adStatusLabel } from "@/lib/ad-labels";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, SectionTitle } from "@/components/kpi";
 
@@ -23,7 +24,7 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
   const sp = await searchParams;
   const { f, currencies } = await withCurrency(parseFilters(sp));
   const sortKey = (typeof sp.sort === "string" && sp.sort in SORTS ? sp.sort : "qualified") as keyof typeof SORTS;
-  const [regions, camps, rowsRaw, fatigue] = await Promise.all([listRegions(), campaignOptions(), creativeTable(f), creativeFatigue(f.to)]);
+  const [regions, camps, rowsRaw, fatigue] = await Promise.all([listRegions(), campaignOptions(f), creativeTable(f), creativeFatigue(f.to)]);
   const rows =
     sortKey === "tired"
       ? [...rowsRaw].sort((a, b) => Number(!!fatigue.get(b.id)?.tired) - Number(!!fatigue.get(a.id)?.tired) || b.spend - a.spend)
@@ -54,15 +55,15 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
       {rows.length === 0 ? (
         <Empty>Оголошень з показами за цей період немає.</Empty>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {rows.map((c) => (
             <article key={c.id} className="card overflow-hidden flex flex-col">
               <a href={c.permalink ?? undefined} target="_blank" rel="noreferrer" className="relative block bg-panel-2">
                 {c.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.thumbnail} alt="" className="aspect-[4/5] w-full object-cover" loading="lazy" />
+                  <img src={c.thumbnail} alt="" className="aspect-square w-full object-cover" loading="lazy" />
                 ) : (
-                  <div className="aspect-[4/5]" />
+                  <div className="aspect-square" />
                 )}
                 {c.isVideo && (
                   <span className="absolute right-2 top-2 rounded-full bg-overlay p-1.5">
@@ -77,20 +78,18 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
                     втомився
                   </span>
                 )}
-                {c.status && c.status !== "ACTIVE" && (
-                  <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">
-                    {c.status.toLowerCase()}
-                  </span>
+                {adStatusLabel(c.status) && (
+                  <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">{adStatusLabel(c.status)}</span>
                 )}
               </a>
-              <div className="flex flex-1 flex-col p-4">
-                <div className="truncate text-[13.5px] font-medium" title={c.name}>
+              <div className="flex flex-1 flex-col p-3">
+                <div className="truncate text-[13px] font-medium" title={c.name}>
                   {c.name}
                 </div>
                 <div className="truncate text-[12px] text-faint" title={c.campaignName ?? ""}>
                   {c.campaignName}
                 </div>
-                {c.body && <p className="mt-2 line-clamp-2 text-[12px] text-muted">{c.body}</p>}
+                {c.body && <p className="mt-1.5 line-clamp-1 text-[12px] text-muted" title={c.body}>{c.body}</p>}
                 {(() => {
                   const fa = fatigue.get(c.id);
                   if (!fa || fa.ctr7 === null) return null;
@@ -106,13 +105,18 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
                     </div>
                   );
                 })()}
-                <dl className="mt-auto grid grid-cols-3 gap-2 pt-4 text-[12px]">
+                <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
                   <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
                   <Stat k="CTR" v={fmtPct(c.ctr, 2)} />
                   <Stat k="Ліди Meta" v={fmtInt(c.metaLeads)} />
                   <Stat k="Ліди CRM" v={fmtInt(c.crm.total)} />
                   <Stat k="Якісні" v={fmtInt(c.crm.qualified)} strong />
-                  <Stat k="Ціна якісного" v={c.costPerQualified ? fmtMoney(c.costPerQualified, c.currency) : "—"} strong />
+                  <Stat
+                    k="Ціна якісного"
+                    v={c.costPerQualified ? `${c.crm.qualified < MIN_SAMPLE ? "≈ " : ""}${fmtMoney(c.costPerQualified, c.currency)}` : "—"}
+                    strong={c.crm.qualified >= MIN_SAMPLE}
+                    title={c.crm.qualified && c.crm.qualified < MIN_SAMPLE ? `Лише ${c.crm.qualified} якісних: орієнтир, а не результат` : undefined}
+                  />
                   <Stat k="Угоди" v={c.crm.won ? fmtInt(c.crm.won) : "—"} />
                   <Stat k="Виручка" v={c.revenue ? fmtMoney(c.revenue, c.currency) : "—"} />
                   <Stat k="ROMI" v={c.romi === null ? "—" : `${c.romi > 0 ? "+" : ""}${Math.round(c.romi * 100)}%`} strong />
@@ -126,9 +130,9 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
   );
 }
 
-function Stat({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
+function Stat({ k, v, strong, title }: { k: string; v: string; strong?: boolean; title?: string }) {
   return (
-    <div>
+    <div title={title}>
       <dt className="text-faint">{k}</dt>
       <dd className={strong ? "text-accent font-medium" : ""}>{v}</dd>
     </div>

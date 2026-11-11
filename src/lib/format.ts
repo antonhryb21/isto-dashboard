@@ -44,3 +44,11 @@ export function plural(n: number, [one, few, many]: [string, string, string]) {
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 }
+
+/** "13 жовт. – 11 лист. 2026" for a pair of YYYY-MM-DD dates. */
+export function fmtRange(from: string, to: string) {
+  const f = (d: string, year: boolean) =>
+    new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(new Date(d + "T00:00:00Z")).replace(" р.", "");
+  if (from === to) return f(to, true);
+  return `${f(from, from.slice(0, 4) !== to.slice(0, 4))} – ${f(to, true)}`;
+}

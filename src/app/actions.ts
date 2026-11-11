@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { sendLeadStage } from "@/lib/meta/crm-events";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
@@ -58,6 +60,7 @@ export async function updateLeadAction(_: ActionResult | null, form: FormData): 
       message = `Збережено в CRM, але не в таблиці: ${e instanceof Error ? e.message : e}`;
     }
   }
+  if (statusChanged && status) after(() => sendLeadStage(before.metaLeadId, status));
   revalidatePath("/crm");
   revalidatePath(`/crm/${id}`);
   return { ok: true, message };

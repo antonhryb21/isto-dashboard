@@ -4,8 +4,8 @@ import { Suspense } from "react";
 import { listRegions } from "@/lib/regions";
 import { hasPeriod, parseFilters } from "@/lib/filters";
 import { FilterBar } from "@/components/filter-bar";
-import { GRAINS, MAX_COLUMNS, buckets, firstDataYear, reportCurrencies, reportData, type Grain, type ReportCell } from "@/lib/reports";
-import { fmtInt, fmtMoney, fmtPct } from "@/lib/format";
+import { GRAINS, MAX_COLUMNS, buckets, crmSince, firstDataYear, reportCurrencies, reportData, type Grain, type ReportCell } from "@/lib/reports";
+import { fmtInt, fmtMoney, fmtPct, fmtRange } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { CsvButton } from "@/components/csv-button";
 
@@ -59,7 +59,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
   const region = one("region");
   const period = hasPeriod(sp) ? parseFilters(sp) : null;
 
-  const [regions, currencies, firstYear] = await Promise.all([listRegions(), reportCurrencies(), firstDataYear()]);
+  const [regions, currencies, firstYear, since] = await Promise.all([listRegions(), reportCurrencies(), firstDataYear(), crmSince()]);
+  // CRM rows of a column that ends before the first CRM lead have no data: "—", not a misleading 0.
+  const cell = (r: Row, c: { key: string; to: string }) => (r.band === "crm" && (!since || c.to < since) ? dash : r.value(cells[c.key], cur));
   const year = Math.min(thisYear, Math.max(firstYear, Number(one("year") ?? thisYear) || thisYear));
   const regionCurrency = region ? regions.find((r) => r.code === region)?.currency : null;
   const cur = (regionCurrency && currencies.includes(regionCurrency) ? regionCurrency : one("cur")) ?? currencies[0] ?? "AED";
@@ -84,7 +86,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
 
   const csv = [
     [groupLabel ?? "", ...cols.map((c) => c.label), ...(showTotal ? ["Разом"] : [])],
-    ...ROWS.map((r) => [r.label, ...cols.map((c) => r.value(cells[c.key], cur)), ...(showTotal ? [r.value(total, cur)] : [])]),
+    ...ROWS.map((r) => [r.label, ...cols.map((c) => cell(r, c)), ...(showTotal ? [r.value(total, cur)] : [])]),
   ];
 
   return (
@@ -167,7 +169,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
                 <td className="sticky-col">{r.label}</td>
                 {cols.map((c) => (
                   <td key={c.key} className="num metric">
-                    {r.value(cells[c.key], cur)}
+                    {cell(r, c)}
                   </td>
                 ))}
                 {showTotal && <td className="num metric total">{r.value(total, cur)}</td>}
@@ -183,7 +185,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
         <p>
           {regionName}
           {currencies.length > 1 ? ` · суми в ${cur}: рекламні кабінети в різних валютах не додаються між собою` : ""}. CPC і CTR рахуються від усіх
-          кліків, як у Ads Manager. «Ліди» — за даними Meta; блок CRM — ліди, створені в цьому періоді, і до якого етапу вони дійшли.
+          кліків, як у Ads Manager. «Ліди» — за даними Meta; блок CRM — ліди, створені в цьому періоді, і до якого етапу вони дійшли{since ? `; дані CRM є з ${fmtRange(since, since)}, раніше стоїть «—»` : ""}.
         </p>
         <p>
           Реакції, коментарі, збереження і поширення — взаємодія з рекламними дописами. Нові підписники Instagram — по всьому акаунту; Meta віддає їх лише

@@ -147,11 +147,27 @@ export function SyncButtons() {
   );
 }
 
+/** Previous month, the current one and four ahead, named in Ukrainian whatever the browser language is. */
+function monthOptions(current: string) {
+  const [y, m] = current.split("-").map(Number);
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 2 + i, 1));
+    const label = new Intl.DateTimeFormat("uk-UA", { month: "long", year: "numeric", timeZone: "UTC" }).format(d).replace(" р.", "");
+    return { value: d.toISOString().slice(0, 7), label };
+  });
+}
+
 export function TargetForm({ regions, defaultMonth }: { regions: { code: string; name: string; currency: string }[]; defaultMonth: string }) {
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(saveTargetAction, null);
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
-      <input name="month" type="month" defaultValue={defaultMonth} required className="input" />
+      <select name="month" defaultValue={defaultMonth} required className="input" aria-label="Місяць">
+        {monthOptions(defaultMonth).map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </select>
       <select name="region" className="input" required defaultValue={regions[0]?.code}>
         {regions.map((r) => (
           <option key={r.code} value={r.code}>

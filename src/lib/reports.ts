@@ -280,3 +280,9 @@ export async function reportData(
   }
   return { cells, total };
 }
+
+/** Day of the first lead in the CRM (app timezone); before it the CRM rows have no data, not zeros. */
+export async function crmSince(): Promise<string | null> {
+  const [r] = await db.select({ d: sql<string | null>`to_char(min(${leads.createdTime} at time zone ${APP_TIMEZONE}), 'YYYY-MM-DD')` }).from(leads);
+  return r?.d ?? null;
+}

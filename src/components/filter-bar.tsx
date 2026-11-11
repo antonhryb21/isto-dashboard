@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { PRESETS, parseFilters } from "@/lib/filters";
+import { CampaignPicker } from "@/components/campaign-picker";
 
 type Option = { value: string; label: string };
 
@@ -114,16 +115,7 @@ export function FilterBar({
           <option value="video">Відео</option>
         </select>
       )}
-      {showCampaign && campaigns && (
-        <select className="input max-w-64" value={sp.get("campaign") ?? ""} onChange={(e) => set({ campaign: e.target.value })}>
-          <option value="">Усі кампанії</option>
-          {campaigns.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      )}
+      {showCampaign && campaigns && <CampaignPicker options={campaigns} value={sp.get("campaign") ?? ""} onChange={(v) => set({ campaign: v })} />}
       {currencies.length > 1 && (
         <div className="flex items-center gap-1 text-[12px] text-faint" title="Рекламні кабінети в різних валютах не додаються між собою">
           Валюта:

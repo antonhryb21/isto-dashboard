@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type 
 import { db } from "@/db";
 import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts, users } from "@/db/schema";
 import { businessMinutes, slaCutoff } from "@/lib/sla";
+import { romiMath } from "@/lib/money";
 import { localDate } from "@/lib/dates";
 import type { Filters } from "@/lib/filters";
 import { SLA_LOOKBACK_DAYS, SLA_MINUTES } from "@/lib/config";
@@ -124,12 +125,7 @@ async function crmBy(key: "campaign" | "ad", f: Filters) {
 type CrmAgg = { total: number; qualified: number; won: number; revenue: number; revenueByCurrency: Record<string, number> };
 const EMPTY_CRM: CrmAgg = { total: 0, qualified: 0, won: 0, revenue: 0, revenueByCurrency: {} };
 
-/** Revenue comparable with spend (same currency or no currency set) and ROMI = (revenue − spend) ÷ spend. */
-export function romiFor(spend: number, currency: string, byCurrency: Record<string, number>) {
-  const revenue = (byCurrency[currency] ?? 0) + (byCurrency[""] ?? 0);
-  const otherCurrency = Object.keys(byCurrency).some((c) => c && c !== currency);
-  return { revenue, otherCurrency, romi: revenue && spend ? (revenue - spend) / spend : null };
-}
+export const romiFor = romiMath;
 
 export async function campaignTable(f: Filters) {
   const rows = await db
@@ -138,16 +134,18 @@ export async function campaignTable(f: Filters) {
       name: campaigns.name,
       region: campaigns.regionCode,
       status: campaigns.status,
+      objective: campaigns.objective,
       spend: sql<string>`sum(${adInsightsDaily.spend})`,
       impressions: sql<string>`sum(${adInsightsDaily.impressions})`,
       linkClicks: sql<string>`sum(${adInsightsDaily.linkClicks})`,
       leads: sql<string>`sum(${adInsightsDaily.leads})`,
+      engagement: sql<string>`sum(${adInsightsDaily.pageEngagement})`,
       currency: sql<string>`max(${adInsightsDaily.currency})`,
     })
     .from(adInsightsDaily)
     .leftJoin(campaigns, eq(campaigns.id, adInsightsDaily.campaignId))
     .where(and(...adWhere(f, f.from, f.to)))
-    .groupBy(adInsightsDaily.campaignId, campaigns.name, campaigns.regionCode, campaigns.status)
+    .groupBy(adInsightsDaily.campaignId, campaigns.name, campaigns.regionCode, campaigns.status, campaigns.objective)
     .orderBy(desc(sql`sum(${adInsightsDaily.spend})`));
   const crm = await crmBy("campaign", f);
   return rows.map((r) => {
@@ -160,10 +158,16 @@ export async function campaignTable(f: Filters) {
       name: r.name ?? r.id ?? "—",
       region: r.region,
       status: r.status,
+      objective: r.objective,
+      // A campaign is a lead campaign when it is set up for leads or actually brought some.
+      isLeadCampaign: /LEAD/i.test(r.objective ?? "") || num(r.leads) > 0 || c.total > 0,
       spend,
       impressions: num(r.impressions),
       linkClicks: num(r.linkClicks),
       metaLeads: num(r.leads),
+      engagement: num(r.engagement),
+      cpm: num(r.impressions) ? (spend / num(r.impressions)) * 1000 : 0,
+      costPerEngagement: num(r.engagement) ? spend / num(r.engagement) : 0,
       ctr: num(r.impressions) ? num(r.linkClicks) / num(r.impressions) : 0,
       cpl: num(r.leads) ? spend / num(r.leads) : 0,
       crm: c,
@@ -230,8 +234,21 @@ export async function creativeTable(f: Filters) {
     .sort((a, b) => b.spend - a.spend);
 }
 
-export async function campaignOptions() {
-  return db.select({ id: campaigns.id, name: campaigns.name, region: campaigns.regionCode }).from(campaigns).orderBy(asc(campaigns.name));
+/** Campaigns for the filter: only those that spent in the period (biggest first), plus the one already chosen. */
+export async function campaignOptions(f?: Filters) {
+  if (!f) return db.select({ id: campaigns.id, name: campaigns.name, region: campaigns.regionCode }).from(campaigns).orderBy(asc(campaigns.name));
+  const rows = await db
+    .select({ id: campaigns.id, name: campaigns.name, region: campaigns.regionCode })
+    .from(adInsightsDaily)
+    .innerJoin(campaigns, eq(campaigns.id, adInsightsDaily.campaignId))
+    .where(and(...adWhere({ ...f, campaign: null }, f.from, f.to)))
+    .groupBy(campaigns.id, campaigns.name, campaigns.regionCode)
+    .orderBy(desc(sql`sum(${adInsightsDaily.spend})`));
+  if (f.campaign && !rows.some((r) => r.id === f.campaign)) {
+    const [chosen] = await db.select({ id: campaigns.id, name: campaigns.name, region: campaigns.regionCode }).from(campaigns).where(eq(campaigns.id, f.campaign)).limit(1);
+    if (chosen) rows.unshift(chosen);
+  }
+  return rows;
 }
 
 // ---------- Leads / CRM ----------

@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
+import { sendLeadStage } from "@/lib/meta/crm-events";
 import { timingSafeEqual } from "node:crypto";
 import { addComment, leadByMetaId, setLeadFields } from "@/lib/leads";
 import { ingestLead } from "@/lib/meta/leadgen";
@@ -61,6 +62,10 @@ export async function POST(request: NextRequest) {
     nextContactAt: next,
     lostReason: body.lost_reason === undefined ? undefined : String(body.lost_reason ?? "").trim().slice(0, 200) || null,
   });
+  if (status && status !== lead.status) {
+    const metaId = lead.metaLeadId;
+    after(() => sendLeadStage(metaId, status));
+  }
   const comment = String(body.comment ?? "").trim();
   if (comment) await addComment(lead.id, author, comment.slice(0, 4000));
 

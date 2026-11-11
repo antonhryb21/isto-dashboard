@@ -64,11 +64,12 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
   );
 }
 
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const path = usePathname();
+  const items = isAdmin ? [...NAV, { href: "/admin", label: "Адмін", icon: Settings }] : NAV;
   return (
     <nav className="md:hidden flex gap-1 overflow-x-auto border-b border-line px-3 py-2">
-      {NAV.map(({ href, label }) => (
+      {items.map(({ href, label }) => (
         <Link
           key={href}
           href={href}
@@ -78,6 +79,9 @@ export function MobileNav() {
           {label}
         </Link>
       ))}
+      <form action="/api/auth/logout" method="post" className="ml-auto shrink-0">
+        <button className="chip whitespace-nowrap text-muted">Вийти</button>
+      </form>
     </nav>
   );
 }

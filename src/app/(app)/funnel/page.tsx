@@ -62,7 +62,13 @@ export default async function FunnelPage({ searchParams }: { searchParams: SP })
                         opacity: crm ? 0.35 + 0.65 * (1 - (i - 2) / 6) : 1,
                       }}
                     />
-                    <span className="absolute inset-y-0 left-3 flex items-center text-[13px] font-medium">{fmtInt(stage.value)}</span>
+                    <span
+                      className="absolute inset-y-0 left-3 flex items-center text-[13px] font-medium"
+                      // On a long sand-coloured bar the number sits on the bar itself: use the ink that reads on it.
+                      style={crm && (stage.value / Math.max(leads, 1)) * 100 > 6 ? { color: "var(--accent-ink)" } : undefined}
+                    >
+                      {fmtInt(stage.value)}
+                    </span>
                   </div>
                 </div>
               </div>

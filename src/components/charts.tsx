@@ -93,7 +93,7 @@ export function FollowersChart({
         <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid stroke={p.line} vertical={false} />
           <XAxis dataKey="date" tickFormatter={fmtDay} {...axis} minTickGap={24} />
-          <YAxis {...axis} width={48} domain={["auto", "auto"]} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+          <YAxis {...axis} width={56} domain={["auto", "auto"]} tickFormatter={(v) => `${Number(v).toFixed(2)}%`} />
           <Tooltip
             contentStyle={{ background: p.panel, border: `1px solid ${p.line}`, borderRadius: 4, fontSize: 12, color: p.text }}
             labelFormatter={(d) => fmtDay(String(d))}

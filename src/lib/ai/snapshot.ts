@@ -24,6 +24,19 @@ const r0 = (n: number | null | undefined) => (n === null || n === undefined || !
 const r2 = (n: number | null | undefined) => (n === null || n === undefined || !Number.isFinite(n) ? null : Math.round(n * 100) / 100);
 const pct = (n: number | null | undefined) => (n === null || n === undefined || !Number.isFinite(n) ? null : Math.round(n * 1000) / 10);
 
+/** A ready comparison, so the model quotes it instead of doing its own arithmetic. */
+function change(label: string, unit: string, prev: number | null, last: number | null) {
+  const changePct = prev && last !== null ? Math.round(((last - prev) / prev) * 1000) / 10 : null;
+  return {
+    metric: label,
+    unit,
+    prev30: prev,
+    last30: last,
+    changePct,
+    direction: changePct === null ? "немає з чим порівняти" : changePct > 0 ? "зросло" : changePct < 0 ? "знизилось" : "без змін",
+  };
+}
+
 function base(from: string, to: string, prevFrom: string, prevTo: string): Filters {
   return { from, to, prevFrom, prevTo, preset: "custom", region: null, platform: null, campaign: null, type: null, q: null, currency: null, currencyRegions: null };
 }
@@ -58,9 +71,20 @@ export async function buildSnapshot() {
     const wk = await reportData("week", weeks, { currency: cur, region: null });
     const real = crm.total - crm.junk;
     const realPrev = crmPrev.total - crmPrev.junk;
+    const money = cur ?? ad.currency;
     markets.push({
-      currency: cur ?? ad.currency,
+      currency: money,
       regions: f.currencyRegions,
+      // Use these for every "було → стало": prev30 is the earlier period, last30 the recent one.
+      changes: [
+        change("витрати", money, r0(adPrev.spend), r0(ad.spend)),
+        change("ліди за Meta", "шт", adPrev.metaLeads, ad.metaLeads),
+        change("ціна ліда за Meta (metaCpl)", money, adPrev.metaLeads ? r0(adPrev.cpl) : null, ad.metaLeads ? r0(ad.cpl) : null),
+        change("реальні ліди в CRM (без спаму)", "шт", realPrev, real),
+        change("ціна реального ліда в CRM", money, realPrev ? r0(adPrev.spend / realPrev) : null, real ? r0(ad.spend / real) : null),
+        change("якісні ліди", "шт", crmPrev.qualified, crm.qualified),
+        change("CTR", "%", pct(adPrev.ctr), pct(ad.ctr)),
+      ],
       ads: {
         last30: { spend: r0(ad.spend), impressions: ad.impressions, linkClicks: ad.linkClicks, ctrPct: pct(ad.ctr), cpm: r2(ad.cpm), metaLeads: ad.metaLeads, metaCpl: r0(ad.cpl) },
         prev30: { spend: r0(adPrev.spend), impressions: adPrev.impressions, linkClicks: adPrev.linkClicks, ctrPct: pct(adPrev.ctr), cpm: r2(adPrev.cpm), metaLeads: adPrev.metaLeads, metaCpl: r0(adPrev.cpl) },
@@ -68,7 +92,7 @@ export async function buildSnapshot() {
       crm: {
         last30: { leads: crm.total, junk: crm.junk, realLeads: real, qualified: crm.qualified, meetings: crm.meetings, won: crm.won, revenue: crm.revenueByCurrency, costPerRealLead: real ? r0(ad.spend / real) : null, costPerQualified: crm.qualified ? r0(ad.spend / crm.qualified) : null },
         prev30: { leads: crmPrev.total, junk: crmPrev.junk, realLeads: realPrev, qualified: crmPrev.qualified, meetings: crmPrev.meetings, won: crmPrev.won, revenue: crmPrev.revenueByCurrency, costPerRealLead: realPrev ? r0(adPrev.spend / realPrev) : null, costPerQualified: crmPrev.qualified ? r0(adPrev.spend / crmPrev.qualified) : null },
-        responseMedianMinutes: r0(speed.medianMinutes),
+        responseMedianWorkMinutes: r0(speed.medianMinutes),
       },
       weekly: weeks.map((w) => {
         const c = wk.cells[w.key];
@@ -134,6 +158,7 @@ export async function buildSnapshot() {
       statusCountsLast30: statuses,
       responseByOwner: owners.map((o) => ({ owner: o.owner ?? "не призначено", leads: o.total, contacted: o.contacted, medianMinutes: r0(o.medianMinutes), withinSlaPct: pct(o.slaShare), waiting: o.waiting })),
       overdueNowCount: overdue.length,
+      note: "medianMinutes і overdue рахуються в робочих хвилинах (нічні ліди не штрафуються).",
     },
     organicSocial: {
       last30: social,
