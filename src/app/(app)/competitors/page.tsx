@@ -255,7 +255,7 @@ function Bar({ value, max, label, own }: { value: number; max: number; label: st
   return (
     <div className="flex min-w-24 items-center gap-2">
       <div className="h-1.5 flex-1 rounded-full bg-panel-2">
-        <div className={`h-1.5 rounded-full ${own ? "bg-accent" : "bg-sand"}`} style={{ width: `${w}%` }} />
+        <div className={`h-1.5 rounded-full ${own ? "bg-data-1" : "bg-data-1/40"}`} style={{ width: `${w}%` }} />
       </div>
       <span className="w-11 text-right text-[12.5px] tabular-nums">{label}</span>
     </div>

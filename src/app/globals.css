@@ -6,6 +6,8 @@
  *          Cool Steel #A5AAB0 · Charcoal Blue #393E49 · Onyx #161616
  * Type:    Aptos (dashboard font, chosen by the team) · Erode Light Italic (secondary)
  * Light is the primary theme (the brand prefers the logo on white); dark uses Onyx.
+ * Surfaces and text follow the brand; colours that carry meaning (data, statuses, good / warning / bad)
+ * are deliberately brighter than the brand tones, which read too dull on charts and badges.
  */
 :root,
 :root[data-theme="light"] {
@@ -21,9 +23,11 @@
   --sand: #a39d8d; /* Khaki Beige */
   --oak: #cec7b4; /* Pale Oak */
   --steel: #a5aab0; /* Cool Steel */
-  --warn: #a9822f;
-  --good: #4f7a5e;
-  --bad: #a4513f;
+  --warn: #d97706;
+  --good: #16a34a;
+  --bad: #dc2626;
+  --data-1: #3b6ef6; /* main data colour: spend, bars, funnel, our account */
+  --data-2: #f97316; /* second series: leads */
   --overlay: rgba(22, 22, 22, 0.62);
   color-scheme: light;
 }
@@ -41,9 +45,11 @@
   --sand: #a39d8d;
   --oak: #cec7b4;
   --steel: #a5aab0;
-  --warn: #d4b06a;
-  --good: #82b394;
-  --bad: #d98a73;
+  --warn: #fbbf24;
+  --good: #4ade80;
+  --bad: #f87171;
+  --data-1: #6b95ff;
+  --data-2: #fb923c;
   --overlay: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }
@@ -63,6 +69,8 @@
   --color-good: var(--good);
   --color-bad: var(--bad);
   --color-warn: var(--warn);
+  --color-data-1: var(--data-1);
+  --color-data-2: var(--data-2);
   --color-steel: var(--steel);
   --color-overlay: var(--overlay);
   /*
@@ -101,7 +109,7 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--sand) 45%, transparent);
+  background: color-mix(in oklab, var(--data-1) 28%, transparent);
 }
 
 .card {
@@ -229,10 +237,10 @@ table.report .sticky-col {
   white-space: nowrap;
 }
 table.report tr.band-crm td {
-  background: color-mix(in oklab, var(--oak) 16%, var(--panel));
+  background: color-mix(in oklab, var(--data-1) 9%, var(--panel));
 }
 table.report tr.band-social td {
-  background: color-mix(in oklab, var(--steel) 22%, var(--panel));
+  background: color-mix(in oklab, var(--data-2) 10%, var(--panel));
 }
 table.report tr.band-followers td {
   background: color-mix(in oklab, var(--good) 14%, var(--panel));
@@ -240,7 +248,7 @@ table.report tr.band-followers td {
 table.report td.total,
 table.report th.total {
   font-weight: 600;
-  background: color-mix(in oklab, var(--oak) 22%, var(--panel));
+  background: color-mix(in oklab, var(--data-1) 14%, var(--panel));
 }
 
 /* Wide comparison tables: column lines and more air between metrics. */

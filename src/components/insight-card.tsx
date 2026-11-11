@@ -3,7 +3,7 @@ import type { AiInsight } from "@/db/schema";
 export const SEVERITY: Record<AiInsight["severity"], { label: string; cls: string; color: string }> = {
   critical: { label: "Критично", cls: "x text-bad", color: "var(--bad)" },
   warning: { label: "Увага", cls: "x text-warn", color: "var(--warn)" },
-  info: { label: "До відома", cls: "x text-muted", color: "var(--steel)" },
+  info: { label: "До відома", cls: "x text-data-1", color: "var(--data-1)" },
   good: { label: "Працює добре", cls: "x text-good", color: "var(--good)" },
 };
 

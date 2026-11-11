@@ -6,17 +6,27 @@ import { fmtPctValue } from "@/lib/format";
 
 const fmtDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
-type Palette = { text: string; faint: string; line: string; panel: string; accent: string; sand: string; good: string };
+type Palette = { text: string; faint: string; line: string; panel: string; accent: string; sand: string; good: string; data1: string; data2: string };
 
 /** Reads the brand tokens from CSS so charts follow the light/dark theme. */
 function usePalette(): Palette {
   const read = (): Palette => {
     if (typeof window === "undefined") {
-      return { text: "#161616", faint: "#8a8476", line: "#e3dfd6", panel: "#ffffff", accent: "#393e49", sand: "#a39d8d", good: "#4f7a5e" };
+      return { text: "#161616", faint: "#8a8476", line: "#e3dfd6", panel: "#ffffff", accent: "#393e49", sand: "#a39d8d", good: "#16a34a", data1: "#3b6ef6", data2: "#f97316" };
     }
     const s = getComputedStyle(document.documentElement);
     const v = (n: string) => s.getPropertyValue(n).trim();
-    return { text: v("--text"), faint: v("--faint"), line: v("--line"), panel: v("--panel"), accent: v("--accent"), sand: v("--sand"), good: v("--good") };
+    return {
+      text: v("--text"),
+      faint: v("--faint"),
+      line: v("--line"),
+      panel: v("--panel"),
+      accent: v("--accent"),
+      sand: v("--sand"),
+      good: v("--good"),
+      data1: v("--data-1"),
+      data2: v("--data-2"),
+    };
   };
   const [p, setP] = useState<Palette>(read);
   useEffect(() => {
@@ -51,9 +61,9 @@ export function SpendLeadsChart({
             labelFormatter={(d) => fmtDay(String(d))}
             formatter={(v, name) => [name === "Витрати" ? `${Number(v).toFixed(0)} ${currency}` : v, name]}
           />
-          <Bar yAxisId="spend" dataKey="spend" name="Витрати" fill={p.sand} fillOpacity={0.55} radius={[2, 2, 0, 0]} />
-          <Line yAxisId="leads" dataKey="leads" name="Ліди" stroke={p.accent} strokeWidth={1.8} dot={false} />
-          <Line yAxisId="leads" dataKey="qualified" name="Якісні" stroke={p.good} strokeWidth={1.8} dot={false} />
+          <Bar yAxisId="spend" dataKey="spend" name="Витрати" fill={p.data1} fillOpacity={0.55} radius={[2, 2, 0, 0]} />
+          <Line yAxisId="leads" dataKey="leads" name="Ліди" stroke={p.data2} strokeWidth={2.2} dot={false} />
+          <Line yAxisId="leads" dataKey="qualified" name="Якісні" stroke={p.good} strokeWidth={2.2} dot={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -66,7 +76,7 @@ export function Sparkline({ data, dataKey }: { data: Record<string, number | str
     <div className="h-10">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data}>
-          <Area dataKey={dataKey} stroke={p.accent} fill={p.sand} fillOpacity={0.2} strokeWidth={1.5} />
+          <Area dataKey={dataKey} stroke={p.data1} fill={p.data1} fillOpacity={0.15} strokeWidth={1.8} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -85,7 +95,8 @@ export function FollowersChart({
   series: { key: string; name: string; own: boolean }[];
 }) {
   const p = usePalette();
-  const colors = ["#a39d8d", "#5b7fa6", "#8a7fb0", "#c29a4b", "#b4704a", "#4f7a5e", "#a4513f", "#60584d"];
+  // Our account is drawn in the main data colour; competitors get distinct bright hues.
+  const colors = ["#f97316", "#10b981", "#8b5cf6", "#ef4444", "#06b6d4", "#eab308", "#ec4899", "#64748b"];
   const axis = { stroke: p.faint, fontSize: 11, tickLine: false, axisLine: false } as const;
   let i = 0;
   return (
@@ -106,7 +117,7 @@ export function FollowersChart({
               key={s.key}
               dataKey={s.key}
               name={s.name}
-              stroke={s.own ? p.accent : colors[i++ % colors.length]}
+              stroke={s.own ? p.data1 : colors[i++ % colors.length]}
               strokeWidth={s.own ? 2.6 : 1.5}
               dot={false}
               connectNulls

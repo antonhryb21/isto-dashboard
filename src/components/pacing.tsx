@@ -72,7 +72,7 @@ export function PacingCard({
                 </span>
               </div>
               <div className="relative mt-2 h-2 rounded-full bg-panel-2">
-                <div className="h-2 rounded-full bg-accent" style={{ width: `${Math.min(100, (p.actual / p.target) * 100)}%` }} />
+                <div className="h-2 rounded-full bg-data-1" style={{ width: `${Math.min(100, (p.actual / p.target) * 100)}%` }} />
                 <div className="absolute -top-1 h-4 w-px bg-text/60" style={{ left: `${expected * 100}%` }} />
               </div>
               <div className="mt-1.5 text-[12px]">

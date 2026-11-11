@@ -8,7 +8,7 @@ export function StatusBadge({ status }: { status: string }) {
   const s = STATUS_BY_CODE[status as StatusCode];
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px]">
-      <span className="h-2 w-2 rounded-full" style={{ background: s?.color ?? "#64748b" }} />
+      <span className="h-2 w-2 rounded-full" style={{ background: s?.color ?? "#94a3b8" }} />
       {s?.label ?? status}
     </span>
   );
@@ -24,7 +24,7 @@ export function StatusSelect({ id, status, disabled }: { id: string; status: str
     <div className="flex flex-col">
       <select
         className="input w-32 py-1 text-[12.5px]"
-        style={{ borderLeft: `3px solid ${STATUS_BY_CODE[value as StatusCode]?.color ?? "#64748b"}` }}
+        style={{ borderLeft: `3px solid ${STATUS_BY_CODE[value as StatusCode]?.color ?? "#94a3b8"}` }}
         value={value}
         disabled={pending}
         onChange={(e) => {

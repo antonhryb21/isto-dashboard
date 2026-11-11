@@ -1,18 +1,18 @@
 /** The CRM pipeline. `label` is what is written to Google Sheets. */
 export const STATUSES = [
-  { code: "new", label: "New", stage: "open", color: "#393e49" },
-  { code: "contacted", label: "Contacted", stage: "open", color: "#5b7fa6" },
-  { code: "qualified", label: "Lead (Qualified)", stage: "open", color: "#6f9a5c" },
-  { code: "follow_up", label: "Follow-up", stage: "open", color: "#8a7fb0" },
-  { code: "no_answer", label: "No answer", stage: "open", color: "#a5aab0" },
-  { code: "meeting", label: "Meeting", stage: "open", color: "#c29a4b" },
-  { code: "proposal", label: "Proposal sent", stage: "open", color: "#b4704a" },
-  { code: "won", label: "Won", stage: "won", color: "#4f7a5e" },
-  { code: "lost", label: "Lost", stage: "lost", color: "#a4513f" },
-  { code: "not_relevant", label: "Not relevant", stage: "junk", color: "#60584d" },
-  { code: "job_inquiry", label: "Job inquiry", stage: "junk", color: "#8c8a83" },
-  { code: "supplier", label: "Supplier", stage: "junk", color: "#a39d8d" },
-  { code: "spam", label: "Spam", stage: "junk", color: "#cec7b4" },
+  { code: "new", label: "New", stage: "open", color: "#3b82f6" },
+  { code: "contacted", label: "Contacted", stage: "open", color: "#06b6d4" },
+  { code: "qualified", label: "Lead (Qualified)", stage: "open", color: "#10b981" },
+  { code: "follow_up", label: "Follow-up", stage: "open", color: "#8b5cf6" },
+  { code: "no_answer", label: "No answer", stage: "open", color: "#94a3b8" },
+  { code: "meeting", label: "Meeting", stage: "open", color: "#f59e0b" },
+  { code: "proposal", label: "Proposal sent", stage: "open", color: "#f97316" },
+  { code: "won", label: "Won", stage: "won", color: "#16a34a" },
+  { code: "lost", label: "Lost", stage: "lost", color: "#ef4444" },
+  { code: "not_relevant", label: "Not relevant", stage: "junk", color: "#78716c" },
+  { code: "job_inquiry", label: "Job inquiry", stage: "junk", color: "#a8a29e" },
+  { code: "supplier", label: "Supplier", stage: "junk", color: "#b45309" },
+  { code: "spam", label: "Spam", stage: "junk", color: "#e11d48" },
 ] as const;
 
 export type StatusCode = (typeof STATUSES)[number]["code"];

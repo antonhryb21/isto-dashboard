@@ -58,14 +58,14 @@ export default async function FunnelPage({ searchParams }: { searchParams: SP })
                       className="h-full rounded-md"
                       style={{
                         width: `${crm ? Math.max((stage.value / Math.max(leads, 1)) * 100, stage.value ? 1.5 : 0) : width}%`,
-                        background: crm ? "var(--accent)" : "color-mix(in oklab, var(--text) 30%, transparent)",
+                        background: crm ? "var(--data-1)" : "color-mix(in oklab, var(--data-1) 35%, transparent)",
                         opacity: crm ? 0.35 + 0.65 * (1 - (i - 2) / 6) : 1,
                       }}
                     />
                     <span
                       className="absolute inset-y-0 left-3 flex items-center text-[13px] font-medium"
-                      // On a long sand-coloured bar the number sits on the bar itself: use the ink that reads on it.
-                      style={crm && (stage.value / Math.max(leads, 1)) * 100 > 6 ? { color: "var(--accent-ink)" } : undefined}
+                      // On a long bar the number sits on the bright fill itself: white reads on it in both themes.
+                      style={crm && (stage.value / Math.max(leads, 1)) * 100 > 6 ? { color: "#ffffff" } : undefined}
                     >
                       {fmtInt(stage.value)}
                     </span>
