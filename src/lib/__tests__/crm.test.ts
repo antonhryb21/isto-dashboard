@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { leadContact, prettyAnswer } from "@/lib/lead-contact";
 import { leadFlags } from "@/lib/lead-flags";
 import { businessMinutes, isWorkingTime, slaCutoff } from "@/lib/sla";
-import { normalizeStatus, parseStatus } from "@/lib/statuses";
+import { CLOSED_CODES, JUNK_CODES, QUALIFIED, normalizeStatus, parseStatus } from "@/lib/statuses";
 import { romiMath } from "@/lib/money";
 import { fmtPctAuto, fmtPctValue } from "@/lib/format";
 import { phoneKey, platformLabel } from "@/lib/lead-source";
@@ -105,5 +105,24 @@ describe("percent display", () => {
   it("formats values already in percent units", () => {
     expect(fmtPctValue(0.001)).toBe("0,001%");
     expect(fmtPctValue(12.345)).toBe("12%");
+  });
+});
+
+describe("statuses from the Telegram bot", () => {
+  it("accepts every button label as it is written in the bot", () => {
+    for (const label of ["Contacted", "Lead (Qualified)", "No answer", "Follow-up", "Job inquiry", "Not relevant", "Spam", "Supplier"]) {
+      expect(parseStatus(label), label).not.toBeNull();
+    }
+    expect(parseStatus("Lead (Qualified)")).toBe("qualified");
+    expect(parseStatus("Job inquiry")).toBe("job_inquiry");
+  });
+  it("reads the new labels from a sheet instead of falling back to New", () => {
+    expect(normalizeStatus("Lead (Qualified)")).toBe("qualified");
+    expect(normalizeStatus("Job inquiry")).toBe("job_inquiry");
+  });
+  it("counts a job seeker as junk and a qualified lead as a real one", () => {
+    expect(JUNK_CODES).toContain("job_inquiry");
+    expect(QUALIFIED).toContain("qualified");
+    expect(CLOSED_CODES).not.toContain("qualified");
   });
 });

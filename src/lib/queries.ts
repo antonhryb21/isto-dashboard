@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts, users } from "@/db/schema";
 import { businessMinutes, slaCutoff } from "@/lib/sla";
@@ -7,10 +7,10 @@ import { romiMath } from "@/lib/money";
 import { localDate } from "@/lib/dates";
 import type { Filters } from "@/lib/filters";
 import { SLA_LOOKBACK_DAYS, SLA_MINUTES } from "@/lib/config";
-import { QUALIFIED, funnelDepth, type StatusCode } from "@/lib/statuses";
+import { CLOSED_CODES, JUNK_CODES, QUALIFIED, funnelDepth, type StatusCode } from "@/lib/statuses";
 
 const num = (v: unknown) => Number(v ?? 0) || 0;
-const JUNK: StatusCode[] = ["spam", "supplier", "not_relevant"];
+const JUNK: StatusCode[] = JUNK_CODES;
 
 // ---------- Ads ----------
 
@@ -362,7 +362,7 @@ export async function owners() {
 
 /** Open leads whose follow-up day has come (today or earlier). */
 export function dueWhere(): SQL[] {
-  return [isNotNull(leads.nextContactAt), lte(leads.nextContactAt, localDate()), sql`${leads.status} not in ('won','lost','not_relevant','supplier','spam')`];
+  return [isNotNull(leads.nextContactAt), lte(leads.nextContactAt, localDate()), notInArray(leads.status, CLOSED_CODES)];
 }
 
 export async function dueFollowUps(region?: string | null) {

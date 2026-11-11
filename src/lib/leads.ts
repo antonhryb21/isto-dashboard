@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leadEvents, leads, regions, type Lead } from "@/db/schema";
-import { normalizeStatus, type StatusCode } from "@/lib/statuses";
+import { CLOSED_CODES, normalizeStatus, type StatusCode } from "@/lib/statuses";
 import { INTEREST_QUESTION, phoneKey } from "@/lib/lead-source";
 
 export type IncomingLead = {
@@ -219,7 +219,7 @@ export async function setLeadFields(
     events.push({ leadId, type: "amount", fromValue: lead.dealAmount, toValue: change.dealAmount || null, author });
   }
   // A closed lead needs no reminder: the date is dropped whatever the form sent.
-  const closed = ["won", "lost", "not_relevant", "supplier", "spam"].includes(patch.status ?? lead.status);
+  const closed = CLOSED_CODES.includes((patch.status ?? lead.status) as StatusCode);
   const nextContact = closed ? null : change.nextContactAt;
   if (nextContact !== undefined && (nextContact || null) !== lead.nextContactAt) {
     patch.nextContactAt = nextContact || null;

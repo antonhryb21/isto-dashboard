@@ -1,9 +1,9 @@
 import "server-only";
-import { and, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, notInArray, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { accountSnapshots, adInsightsDaily, campaigns, leads, regions } from "@/db/schema";
 import { APP_TIMEZONE } from "@/lib/dates";
-import { QUALIFIED } from "@/lib/statuses";
+import { JUNK_CODES, QUALIFIED } from "@/lib/statuses";
 import { META } from "@/lib/config";
 
 export type Grain = "day" | "week" | "month" | "year";
@@ -251,7 +251,7 @@ export async function reportData(
   const crm = await db
     .select({
       b: lb,
-      leads: sql<string>`count(*) filter (where ${leads.status} not in ('spam','supplier','not_relevant'))`,
+      leads: sql<string>`count(*) filter (where ${notInArray(leads.status, JUNK_CODES)})`,
       qualified: sql<string>`count(*) filter (where ${inArray(leads.status, QUALIFIED)})`,
       meetings: sql<string>`count(*) filter (where ${inArray(leads.status, ["meeting", "proposal", "won"])})`,
       won: sql<string>`count(*) filter (where ${leads.status} = 'won')`,

@@ -2,6 +2,7 @@
 export const STATUSES = [
   { code: "new", label: "New", stage: "open", color: "#393e49" },
   { code: "contacted", label: "Contacted", stage: "open", color: "#5b7fa6" },
+  { code: "qualified", label: "Lead (Qualified)", stage: "open", color: "#6f9a5c" },
   { code: "follow_up", label: "Follow-up", stage: "open", color: "#8a7fb0" },
   { code: "no_answer", label: "No answer", stage: "open", color: "#a5aab0" },
   { code: "meeting", label: "Meeting", stage: "open", color: "#c29a4b" },
@@ -9,6 +10,7 @@ export const STATUSES = [
   { code: "won", label: "Won", stage: "won", color: "#4f7a5e" },
   { code: "lost", label: "Lost", stage: "lost", color: "#a4513f" },
   { code: "not_relevant", label: "Not relevant", stage: "junk", color: "#60584d" },
+  { code: "job_inquiry", label: "Job inquiry", stage: "junk", color: "#8c8a83" },
   { code: "supplier", label: "Supplier", stage: "junk", color: "#a39d8d" },
   { code: "spam", label: "Spam", stage: "junk", color: "#cec7b4" },
 ] as const;
@@ -24,7 +26,13 @@ export const STATUS_BY_CODE = Object.fromEntries(STATUSES.map((s) => [s.code, s]
 export const FUNNEL_ORDER: StatusCode[] = ["new", "contacted", "meeting", "proposal", "won"];
 
 /** Statuses that count as a qualified (real) lead. */
-export const QUALIFIED: StatusCode[] = ["contacted", "follow_up", "meeting", "proposal", "won", "lost"];
+export const QUALIFIED: StatusCode[] = ["contacted", "qualified", "follow_up", "meeting", "proposal", "won", "lost"];
+
+/** Not a client at all (spam, a supplier, a job seeker…): left out of "real leads". Derived, so a new junk status is never missed. */
+export const JUNK_CODES = STATUSES.filter((s) => s.stage === "junk").map((s) => s.code) as StatusCode[];
+
+/** Nothing left to do with the lead: no reminders, no response-time clock. */
+export const CLOSED_CODES = STATUSES.filter((s) => s.stage !== "open").map((s) => s.code) as StatusCode[];
 
 const ALIASES: Record<string, StatusCode> = {
   created: "new",
@@ -33,6 +41,11 @@ const ALIASES: Record<string, StatusCode> = {
   new: "new",
   contacted: "contacted",
   "звʼязались": "contacted",
+  "lead (qualified)": "qualified",
+  "lead qualified": "qualified",
+  qualified: "qualified",
+  "якісний": "qualified",
+  "кваліфікований": "qualified",
   "follow-up": "follow_up",
   "follow up": "follow_up",
   followup: "follow_up",
@@ -48,6 +61,10 @@ const ALIASES: Record<string, StatusCode> = {
   lost: "lost",
   "not relevant": "not_relevant",
   "не наш": "not_relevant",
+  "job inquiry": "job_inquiry",
+  "job": "job_inquiry",
+  "вакансія": "job_inquiry",
+  "резюме": "job_inquiry",
   supplier: "supplier",
   "підрядник": "supplier",
   spam: "spam",
@@ -67,6 +84,7 @@ export function funnelDepth(code: StatusCode): number {
     case "no_answer":
       return 0;
     case "contacted":
+    case "qualified":
     case "follow_up":
     case "lost":
       return 1;
