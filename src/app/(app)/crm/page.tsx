@@ -3,19 +3,25 @@ import Link from "next/link";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
-import { leadList, overdueLeads, ownerSpeed, owners, responseSpeed, statusCounts } from "@/lib/queries";
+import { MessageCircle } from "lucide-react";
+import { dueFollowUps, leadList, lostReasons, overdueLeads, ownerLabel, ownerSpeed, owners, responseSpeed, statusCounts } from "@/lib/queries";
 import { SLA_MINUTES } from "@/lib/config";
-import { minutesSince } from "@/lib/dates";
+import { localDate } from "@/lib/dates";
+import { businessMinutes, isOverdue, workTimeLabel } from "@/lib/sla";
+import { leadFlags } from "@/lib/lead-flags";
 import { STATUSES } from "@/lib/statuses";
-import { fmtDate, fmtInt, fmtMinutes, fmtPct, plural } from "@/lib/format";
+import { fmtDate, fmtInt, fmtPct, plural } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
-import { StatusBadge, StatusSelect } from "@/components/crm-controls";
+import { OwnerSelect, StatusBadge, StatusSelect } from "@/components/crm-controls";
 import { leadContact } from "@/lib/lead-contact";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
 const BOARD = STATUSES.filter((s) => s.stage !== "junk");
+const PER_PAGE = 100;
+/** Working time as "25 хв" / "3,5 роб. год". */
+const fmtWork = (m: number) => (m < 60 ? `${m} хв` : `${(m / 60).toLocaleString("uk-UA", { maximumFractionDigits: 1 })} роб. год`);
 
 export default async function CrmPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -26,17 +32,26 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
   const status = typeof sp.status === "string" ? sp.status : null;
   const owner = typeof sp.owner === "string" ? sp.owner : null;
   const overdueOnly = sp.overdue === "1";
+  const dueOnly = sp.due === "1";
+  const special = overdueOnly || dueOnly;
+  const page = Math.max(1, Number(sp.lp) || 1);
+  const me = ownerLabel(user);
 
-  const [regions, list, counts, speed, ownerList, overdue, byOwner] = await Promise.all([
+  const [regions, all, counts, speed, ownerList, overdue, byOwner, due, reasons] = await Promise.all([
     listRegions(),
-    leadList(f, { status: view === "list" && !overdueOnly ? status : null, owner, overdue: overdueOnly }),
+    leadList(f, { status: view === "list" && !special ? status : null, owner, overdue: overdueOnly, due: dueOnly, limit: 2000 }),
     statusCounts(f),
     responseSpeed(f),
     owners(),
     overdueLeads(f.region),
     ownerSpeed(f),
+    dueFollowUps(f.region),
+    lostReasons(f),
   ]);
-  const waitedMin = minutesSince;
+  const pages = Math.max(1, Math.ceil(all.length / PER_PAGE));
+  const list = view === "list" ? all.slice((Math.min(page, pages) - 1) * PER_PAGE, Math.min(page, pages) * PER_PAGE) : all;
+  const today = localDate();
+  const unassigned = byOwner.find((o) => !o.owner)?.total ?? 0;
   const regionName = Object.fromEntries(regions.map((r) => [r.code, r.name]));
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const qs = (patch: Record<string, string | null>) => {
@@ -73,10 +88,10 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
         <Kpi
           label="Чекають контакту"
           value={fmtInt(counts.new ?? 0)}
-          hint={overdue.length ? `${overdue.length} довше ${SLA_MINUTES} хв` : "статус New"}
+          hint={overdue.length ? `${overdue.length} довше ${SLA_MINUTES} хв робочого часу` : "статус New"}
           accent={(counts.new ?? 0) > 0}
         />
-        <Kpi label="Медіана реакції" value={fmtMinutes(speed.medianMinutes)} hint={`виміряно для ${speed.measured}`} />
+        <Kpi label="Медіана реакції" value={speed.medianMinutes === null ? "—" : fmtWork(Math.round(speed.medianMinutes))} hint={`робочий час · виміряно для ${speed.measured}`} />
         <Kpi label="Угоди" value={fmtInt(counts.won ?? 0)} />
       </div>
 
@@ -84,15 +99,28 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
         <div className="card flex flex-wrap items-center justify-between gap-3 border-bad/50 p-4">
           <div className="text-sm">
             <span className="font-medium text-bad">
-              {overdue.length} {plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше {SLA_MINUTES} хв.
+              {overdue.length} {plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше {SLA_MINUTES} хв робочого часу.
             </span>{" "}
             <span className="text-muted">
-              Найдовше — {fmtMinutes(waitedMin(overdue[0].createdTime))}
-              {overdue[0].fullName ? ` (${overdue[0].fullName})` : ""}.
+              Найдовше — {fmtWork(businessMinutes(overdue[0].createdTime))}
+              {overdue[0].fullName ? ` (${overdue[0].fullName})` : ""}. Робочий час: {workTimeLabel()}.
             </span>
           </div>
-          <Link className="btn" href={overdueOnly ? qs({ overdue: null }) : qs({ overdue: "1", view: null, status: null })}>
+          <Link className="btn" href={overdueOnly ? qs({ overdue: null, lp: null }) : qs({ overdue: "1", due: null, view: null, status: null, lp: null })}>
             {overdueOnly ? "Показати всі" : "Показати прострочені"}
+          </Link>
+        </div>
+      )}
+
+      {(due.length > 0 || dueOnly) && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 border-warn/50 p-4">
+          <div className="text-sm">
+            <span className="font-medium text-warn">
+              {due.length} {plural(due.length, ["нагадування", "нагадування", "нагадувань"])} про повторний контакт на сьогодні або раніше.
+            </span>
+          </div>
+          <Link className="btn" href={dueOnly ? qs({ due: null, lp: null }) : qs({ due: "1", overdue: null, view: null, status: null, lp: null })}>
+            {dueOnly ? "Показати всі" : "Показати нагадування"}
           </Link>
         </div>
       )}
@@ -109,19 +137,25 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
               {s.label} · {counts[s.code] ?? 0}
             </Link>
           ))}
-        {ownerList.length > 0 && (
-          <span className="ml-2 flex flex-wrap items-center gap-1 text-[12px] text-faint">
-            Відповідальний:
-            <Link className="chip" data-active={!owner} href={qs({ owner: null })}>
-              усі
+      </div>
+      <div className="-mt-3 flex flex-wrap items-center gap-1 text-[12px] text-faint">
+        Відповідальний:
+        <Link className="chip" data-active={!owner} href={qs({ owner: null, lp: null })}>
+          усі
+        </Link>
+        <Link className="chip" data-active={owner === me} href={qs({ owner: me, lp: null })}>
+          мої
+        </Link>
+        <Link className="chip" data-active={owner === "-"} href={qs({ owner: "-", lp: null })}>
+          не призначено{unassigned ? ` · ${unassigned}` : ""}
+        </Link>
+        {ownerList
+          .filter((o) => o !== me)
+          .map((o) => (
+            <Link key={o} className="chip" data-active={owner === o} href={qs({ owner: o, lp: null })}>
+              {o}
             </Link>
-            {ownerList.map((o) => (
-              <Link key={o} className="chip" data-active={owner === o} href={qs({ owner: o })}>
-                {o}
-              </Link>
-            ))}
-          </span>
-        )}
+          ))}
       </div>
 
       {list.length === 0 ? (
@@ -145,8 +179,8 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                 <tr key={l.id}>
                   <td className="whitespace-nowrap text-muted">
                     {fmtDate(l.createdTime, true)}
-                    {l.status === "new" && waitedMin(l.createdTime) > SLA_MINUTES && waitedMin(l.createdTime) < 7 * 1440 && (
-                      <div className="text-[11px] font-medium text-bad">чекає {fmtMinutes(waitedMin(l.createdTime))}</div>
+                    {l.status === "new" && isOverdue(l.createdTime) && (
+                      <div className="text-[11px] font-medium text-bad">чекає {fmtWork(businessMinutes(l.createdTime))}</div>
                     )}
                   </td>
                   <td>
@@ -159,14 +193,41 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                   <td className="max-w-56 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
                     {l.isOrganic ? "органіка" : l.campaignName ?? "—"}
                   </td>
-                  <td className="text-muted">{l.owner ?? "—"}</td>
                   <td>
+                    <OwnerSelect id={l.id} owner={l.owner} owners={ownerList} disabled={!canEdit} />
+                  </td>
+                  <td className="pr-4">
                     <StatusSelect id={l.id} status={l.status} disabled={!canEdit} />
+                    {l.nextContactAt && (
+                      <div className={`mt-1 text-[11px] ${l.nextContactAt <= today ? "font-medium text-warn" : "text-faint"}`}>
+                        контакт {fmtDate(new Date(l.nextContactAt + "T12:00:00Z"))}
+                      </div>
+                    )}
+                    {l.lostReason && <div className="mt-1 max-w-36 truncate text-[11px] text-faint" title={l.lostReason}>{l.lostReason}</div>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 text-[12px] text-faint">
+              <span>
+                {fmtInt(all.length)} {plural(all.length, ["лід", "ліди", "лідів"])} · стор. {Math.min(page, pages)}/{pages}
+              </span>
+              <span className="flex gap-1">
+                {page > 1 && (
+                  <Link className="chip" href={qs({ lp: page - 1 > 1 ? String(page - 1) : null })}>
+                    ← новіші
+                  </Link>
+                )}
+                {page < pages && (
+                  <Link className="chip" href={qs({ lp: String(page + 1) })}>
+                    старіші →
+                  </Link>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2">
@@ -200,6 +261,19 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
         </div>
       )}
 
+      {reasons.length > 0 && (
+        <div className="card p-5">
+          <div className="label">Причини відмов за період</div>
+          <div className="mt-3 flex flex-wrap gap-2 text-[13px]">
+            {reasons.map((r) => (
+              <span key={r.reason ?? "-"} className="chip">
+                {r.reason ?? <span className="text-bad">причину не вказано</span>} · {r.n}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {byOwner.some((o) => o.owner) && (
         <div className="card overflow-x-auto">
           <div className="label px-5 pt-4">Швидкість реакції по відповідальних</div>
@@ -220,7 +294,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                   <td>{o.owner ?? <span className="text-faint">не призначено</span>}</td>
                   <td className="num">{fmtInt(o.total)}</td>
                   <td className="num">{fmtInt(o.contacted)}</td>
-                  <td className="num">{fmtMinutes(o.medianMinutes)}</td>
+                  <td className="num">{o.medianMinutes === null ? "—" : fmtWork(Math.round(o.medianMinutes))}</td>
                   <td className="num">
                     {o.slaShare === null ? "—" : <span className={o.slaShare >= 0.8 ? "text-good" : o.slaShare < 0.5 ? "text-bad" : ""}>{fmtPct(o.slaShare, 0)}</span>}
                   </td>
@@ -236,16 +310,41 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
 }
 
 /** Name, phone, email and city — one per line, as the team reads them. */
-function LeadContact({ l }: { l: Parameters<typeof leadContact>[0] & { id: string } }) {
+function LeadContact({ l }: { l: Parameters<typeof leadFlags>[0] & { id: string } }) {
   const c = leadContact(l);
+  const flags = leadFlags(l);
   return (
     <div className="flex min-w-48 flex-col leading-snug">
       <Link href={`/crm/${l.id}`} className="font-medium hover:text-accent">
         {c.name || <span className="text-faint">Без імені</span>}
       </Link>
-      {c.phone && <span className="text-[12px] text-muted">{c.phone}</span>}
+      {c.phone && (
+        <span className="flex items-center gap-1.5 text-[12px] text-muted">
+          <a href={`tel:${c.phone}`} className="hover:text-text">
+            {c.phone}
+          </a>
+          <a
+            href={`https://wa.me/${c.phone.replace(/[^\d]/g, "")}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Написати у WhatsApp"
+            className="text-faint hover:text-good"
+          >
+            <MessageCircle size={12} />
+          </a>
+        </span>
+      )}
       {c.email && <span className="break-all text-[12px] text-muted">{c.email}</span>}
       {c.city && <span className="text-[12px] text-faint">{c.city}</span>}
+      {flags.length > 0 && (
+        <span className="mt-1 flex flex-wrap gap-1">
+          {flags.map((fl) => (
+            <span key={fl.code} title={fl.hint} className="rounded-full border border-warn/50 px-1.5 py-px text-[10.5px] text-warn">
+              {fl.label}
+            </span>
+          ))}
+        </span>
+      )}
     </div>
   );
 }

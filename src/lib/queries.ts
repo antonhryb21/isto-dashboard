@@ -1,7 +1,9 @@
 import "server-only";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts } from "@/db/schema";
+import { accountSnapshots, adInsightsDaily, ads, campaigns, leadEvents, leads, regions, socialPosts, users } from "@/db/schema";
+import { businessMinutes, slaCutoff } from "@/lib/sla";
+import { localDate } from "@/lib/dates";
 import type { Filters } from "@/lib/filters";
 import { SLA_LOOKBACK_DAYS, SLA_MINUTES } from "@/lib/config";
 import { QUALIFIED, funnelDepth, type StatusCode } from "@/lib/statuses";
@@ -290,10 +292,15 @@ export async function leadsDaily(f: Filters) {
   return rows.map((r) => ({ date: r.date, total: num(r.total), qualified: num(r.qualified) }));
 }
 
-export async function leadList(f: Filters, opts: { status?: string | null; owner?: string | null; overdue?: boolean; limit?: number } = {}) {
-  const w = opts.overdue ? [...overdueWhere(), ...(f.region ? [eq(leads.regionCode, f.region)] : [])] : leadWhere(f, f.from, f.to);
+export async function leadList(
+  f: Filters,
+  opts: { status?: string | null; owner?: string | null; overdue?: boolean; due?: boolean; limit?: number } = {},
+) {
+  const region = f.region ? [eq(leads.regionCode, f.region)] : [];
+  const w = opts.overdue ? [...overdueWhere(), ...region] : opts.due ? [...dueWhere(), ...region] : leadWhere(f, f.from, f.to);
   if (opts.status) w.push(eq(leads.status, opts.status));
-  if (opts.owner) w.push(eq(leads.owner, opts.owner));
+  if (opts.owner === "-") w.push(sql`(${leads.owner} is null or ${leads.owner} = '')`);
+  else if (opts.owner) w.push(eq(leads.owner, opts.owner));
   if (f.q) {
     const like = `%${f.q}%`;
     w.push(or(ilike(leads.fullName, like), ilike(leads.phone, like), ilike(leads.email, like), ilike(leads.city, like))!);
@@ -315,9 +322,44 @@ export async function statusCounts(f: Filters) {
   return Object.fromEntries(rows.map((r) => [r.status, num(r.n)])) as Record<string, number>;
 }
 
+/** Name a dashboard user appears under as a lead owner. */
+export function ownerLabel(u: { name: string | null; email: string }) {
+  return u.name?.trim() || u.email.split("@")[0];
+}
+
+/** Everyone a lead can be assigned to: people with CRM access plus names already used (e.g. set by the Telegram bot). */
 export async function owners() {
-  const rows = await db.selectDistinct({ owner: leads.owner }).from(leads).where(sql`${leads.owner} is not null and ${leads.owner} <> ''`);
-  return rows.map((r) => r.owner!).sort();
+  const [used, staff] = await Promise.all([
+    db.selectDistinct({ owner: leads.owner }).from(leads).where(sql`${leads.owner} is not null and ${leads.owner} <> ''`),
+    db.select({ name: users.name, email: users.email }).from(users).where(inArray(users.role, ["admin", "marketing"])),
+  ]);
+  return [...new Set([...staff.map(ownerLabel), ...used.map((r) => r.owner!)])].sort((a, b) => a.localeCompare(b, "uk"));
+}
+
+/** Open leads whose follow-up day has come (today or earlier). */
+export function dueWhere(): SQL[] {
+  return [isNotNull(leads.nextContactAt), lte(leads.nextContactAt, localDate()), sql`${leads.status} not in ('won','lost','not_relevant','supplier','spam')`];
+}
+
+export async function dueFollowUps(region?: string | null) {
+  const w = dueWhere();
+  if (region) w.push(eq(leads.regionCode, region));
+  return db
+    .select({ id: leads.id, fullName: leads.fullName, owner: leads.owner, nextContactAt: leads.nextContactAt, regionCode: leads.regionCode })
+    .from(leads)
+    .where(and(...w))
+    .orderBy(asc(leads.nextContactAt));
+}
+
+/** Why leads of the period were closed without a deal. */
+export async function lostReasons(f: Filters) {
+  const rows = await db
+    .select({ reason: sql<string>`coalesce(nullif(${leads.lostReason}, ''), '')`, n: sql<string>`count(*)` })
+    .from(leads)
+    .where(and(...leadWhere(f, f.from, f.to), inArray(leads.status, ["lost", "not_relevant"])))
+    .groupBy(sql`1`)
+    .orderBy(desc(sql`count(*)`));
+  return rows.map((r) => ({ reason: r.reason || null, n: num(r.n) }));
 }
 
 export async function leadDetail(id: string) {
@@ -329,16 +371,21 @@ export async function leadDetail(id: string) {
 }
 
 /** Median minutes from lead creation to the first move out of "new", and how many still wait. */
+const median = (v: number[]) => {
+  if (!v.length) return null;
+  const a = [...v].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
+/** Time to first contact, counted in working minutes (a lead that arrives at night starts the clock in the morning). */
 export async function responseSpeed(f: Filters) {
-  const [r] = await db
-    .select({
-      median: sql<string>`percentile_cont(0.5) within group (order by extract(epoch from (${leads.firstContactAt} - ${leads.createdTime})) / 60)`,
-      measured: sql<string>`count(${leads.firstContactAt})`,
-      waiting: sql<string>`count(*) filter (where ${leads.status} = 'new')`,
-    })
+  const rows = await db
+    .select({ created: leads.createdTime, first: leads.firstContactAt, status: leads.status })
     .from(leads)
     .where(and(...leadWhere(f, f.from, f.to)));
-  return { medianMinutes: r?.median ? num(r.median) : null, measured: num(r?.measured), waiting: num(r?.waiting) };
+  const times = rows.filter((r) => r.first).map((r) => businessMinutes(r.created, r.first!));
+  return { medianMinutes: median(times), measured: times.length, waiting: rows.filter((r) => r.status === "new").length };
 }
 
 // ---------- Funnel ----------
@@ -451,13 +498,9 @@ export async function followers() {
   return { ig: latest("ig"), fb: latest("fb") };
 }
 
-/** Leads waiting in "New" longer than the response target (any period, last week only). */
+/** Leads waiting in "New" longer than the response target in working time (last week only). */
 export function overdueWhere(): SQL[] {
-  return [
-    eq(leads.status, "new"),
-    lte(leads.createdTime, new Date(Date.now() - SLA_MINUTES * 60_000)),
-    gte(leads.createdTime, new Date(Date.now() - SLA_LOOKBACK_DAYS * 86_400_000)),
-  ];
+  return [eq(leads.status, "new"), lte(leads.createdTime, slaCutoff()), gte(leads.createdTime, new Date(Date.now() - SLA_LOOKBACK_DAYS * 86_400_000))];
 }
 
 export async function overdueLeads(region?: string | null) {
@@ -470,29 +513,31 @@ export async function overdueLeads(region?: string | null) {
     .orderBy(asc(leads.createdTime));
 }
 
-/** Response speed per owner for leads created in the period. */
+/** Response speed per owner for leads created in the period, in working minutes. */
 export async function ownerSpeed(f: Filters) {
   const rows = await db
-    .select({
-      owner: sql<string>`coalesce(${leads.owner}, '')`,
-      total: sql<string>`count(*)`,
-      contacted: sql<string>`count(${leads.firstContactAt})`,
-      median: sql<string | null>`percentile_cont(0.5) within group (order by extract(epoch from (${leads.firstContactAt} - ${leads.createdTime})) / 60)`,
-      inSla: sql<string>`count(*) filter (where ${leads.firstContactAt} - ${leads.createdTime} <= make_interval(mins => ${SLA_MINUTES}))`,
-      waiting: sql<string>`count(*) filter (where ${leads.status} = 'new')`,
-    })
+    .select({ owner: leads.owner, created: leads.createdTime, first: leads.firstContactAt, status: leads.status })
     .from(leads)
-    .where(and(...leadWhere(f, f.from, f.to)))
-    .groupBy(sql`1`)
-    .orderBy(desc(sql`count(*)`));
-  return rows.map((r) => ({
-    owner: r.owner || null,
-    total: num(r.total),
-    contacted: num(r.contacted),
-    medianMinutes: r.median === null ? null : num(r.median),
-    slaShare: num(r.contacted) ? num(r.inSla) / num(r.contacted) : null,
-    waiting: num(r.waiting),
-  }));
+    .where(and(...leadWhere(f, f.from, f.to)));
+  const by = new Map<string, { total: number; times: number[]; waiting: number }>();
+  for (const r of rows) {
+    const k = r.owner?.trim() || "";
+    const g = by.get(k) ?? { total: 0, times: [], waiting: 0 };
+    g.total++;
+    if (r.first) g.times.push(businessMinutes(r.created, r.first));
+    if (r.status === "new") g.waiting++;
+    by.set(k, g);
+  }
+  return [...by.entries()]
+    .map(([owner, g]) => ({
+      owner: owner || null,
+      total: g.total,
+      contacted: g.times.length,
+      medianMinutes: median(g.times),
+      slaShare: g.times.length ? g.times.filter((t) => t <= SLA_MINUTES).length / g.times.length : null,
+      waiting: g.waiting,
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 
 /**

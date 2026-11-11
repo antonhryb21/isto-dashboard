@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { leadEvents, leads, type Lead } from "@/db/schema";
+import { leadEvents, leads, regions, type Lead } from "@/db/schema";
 import { normalizeStatus, type StatusCode } from "@/lib/statuses";
 
 export type IncomingLead = {
@@ -43,19 +43,26 @@ export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" |
 
   if (!existing) {
     const status = normalizeStatus(input.statusRaw);
+    // A new Meta lead goes straight to the person responsible for its region, if one is set in Admin.
+    let autoOwner: string | null = null;
+    if (author === "meta" && !input.owner && input.regionCode) {
+      const [r] = await db.select({ owner: regions.defaultOwner }).from(regions).where(eq(regions.code, input.regionCode)).limit(1);
+      autoOwner = r?.owner ?? null;
+    }
     const [row] = await db
       .insert(leads)
       .values({
         ...input,
         status,
         statusRaw: input.statusRaw ?? null,
-        owner: input.owner ?? null,
+        owner: input.owner ?? autoOwner,
         sheetComment: input.sheetComment ?? null,
       })
       .onConflictDoNothing()
       .returning({ id: leads.id });
     if (row) {
       await db.insert(leadEvents).values({ leadId: row.id, type: "created", toValue: status, author, createdAt: input.createdTime });
+      if (autoOwner) await db.insert(leadEvents).values({ leadId: row.id, type: "owner", toValue: autoOwner, author: "auto" });
     }
     return "created";
   }
@@ -114,7 +121,14 @@ export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" |
 export async function setLeadFields(
   leadId: string,
   author: string,
-  change: { status?: StatusCode; owner?: string | null; dealAmount?: string | null; dealCurrency?: string | null },
+  change: {
+    status?: StatusCode;
+    owner?: string | null;
+    dealAmount?: string | null;
+    dealCurrency?: string | null;
+    nextContactAt?: string | null;
+    lostReason?: string | null;
+  },
 ) {
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
   if (!lead) throw new Error("Lead not found");
@@ -135,6 +149,17 @@ export async function setLeadFields(
     patch.dealAmount = change.dealAmount || null;
     patch.dealCurrency = change.dealCurrency ?? lead.dealCurrency;
     events.push({ leadId, type: "amount", fromValue: lead.dealAmount, toValue: change.dealAmount || null, author });
+  }
+  // A closed lead needs no reminder: the date is dropped whatever the form sent.
+  const closed = ["won", "lost", "not_relevant", "supplier", "spam"].includes(patch.status ?? lead.status);
+  const nextContact = closed ? null : change.nextContactAt;
+  if (nextContact !== undefined && (nextContact || null) !== lead.nextContactAt) {
+    patch.nextContactAt = nextContact || null;
+    events.push({ leadId, type: "next", fromValue: lead.nextContactAt, toValue: nextContact || null, author });
+  }
+  if (change.lostReason !== undefined && (change.lostReason || null) !== lead.lostReason) {
+    patch.lostReason = change.lostReason || null;
+    events.push({ leadId, type: "reason", fromValue: lead.lostReason, toValue: change.lostReason || null, author });
   }
   await db.update(leads).set(patch).where(eq(leads.id, leadId));
   if (events.length) await db.insert(leadEvents).values(events);

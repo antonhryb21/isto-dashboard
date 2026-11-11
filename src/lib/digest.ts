@@ -6,7 +6,7 @@ import { SLA_MINUTES } from "@/lib/config";
 import { daysAgo } from "@/lib/dates";
 import type { Filters } from "@/lib/filters";
 import { fmtInt, fmtMoney, plural } from "@/lib/format";
-import { adTotals, crmTotals, overdueLeads, withCurrency } from "@/lib/queries";
+import { adTotals, crmTotals, dueFollowUps, overdueLeads, withCurrency } from "@/lib/queries";
 import { lastSync, runProblems } from "@/lib/sync";
 import { monthPacing } from "@/lib/targets";
 import { escapeHtml as e, sendTelegram } from "@/lib/telegram";
@@ -93,7 +93,12 @@ export async function buildDigest(appUrl = process.env.APP_URL ?? "") {
   }
 
   const overdue = await overdueLeads();
-  if (overdue.length) alerts.push(`⏰ ${overdue.length} ${plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше ${SLA_MINUTES} хв`);
+  if (overdue.length) alerts.push(`⏰ ${overdue.length} ${plural(overdue.length, ["лід чекає", "ліди чекають", "лідів чекають"])} контакту довше ${SLA_MINUTES} хв робочого часу`);
+  const due = await dueFollowUps();
+  if (due.length) {
+    const who = [...new Set(due.map((d) => d.owner).filter(Boolean))].slice(0, 5).join(", ");
+    alerts.push(`🔁 ${due.length} ${plural(due.length, ["нагадування", "нагадування", "нагадувань"])} про повторний контакт на сьогодні${who ? ` (${e(who)})` : ""}`);
+  }
 
   const problems = runProblems(await lastSync());
   if (problems.length) alerts.push(`⚠️ Дані не оновились: ${e(problems[0].step)} — ${e(problems[0].error)}`);

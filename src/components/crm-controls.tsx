@@ -1,8 +1,8 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { addCommentAction, quickStatusAction, updateLeadAction, type ActionResult } from "@/app/actions";
-import { STATUSES, STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
+import { addCommentAction, quickOwnerAction, quickStatusAction, updateLeadAction, type ActionResult } from "@/app/actions";
+import { LOST_REASONS, NEEDS_REASON, STATUSES, STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 
 export function StatusBadge({ status }: { status: string }) {
   const s = STATUS_BY_CODE[status as StatusCode];
@@ -23,7 +23,7 @@ export function StatusSelect({ id, status, disabled }: { id: string; status: str
   return (
     <div className="flex flex-col">
       <select
-        className="input py-1 text-[12.5px]"
+        className="input w-36 py-1 text-[12.5px]"
         style={{ borderLeft: `3px solid ${STATUS_BY_CODE[value as StatusCode]?.color ?? "#64748b"}` }}
         value={value}
         disabled={pending}
@@ -49,12 +49,46 @@ export function StatusSelect({ id, status, disabled }: { id: string; status: str
   );
 }
 
+/** Inline owner dropdown for the lead list. */
+export function OwnerSelect({ id, owner, owners, disabled }: { id: string; owner: string | null; owners: string[]; disabled?: boolean }) {
+  const [value, setValue] = useState(owner ?? "");
+  const [pending, start] = useTransition();
+  if (disabled) return <span className="text-muted">{owner ?? "—"}</span>;
+  const options = value && !owners.includes(value) ? [value, ...owners] : owners;
+  return (
+    <select
+      className={`input w-36 py-1 text-[12.5px] ${value ? "" : "text-faint"}`}
+      value={value}
+      disabled={pending}
+      aria-label="Відповідальний"
+      onChange={(e) => {
+        const next = e.target.value;
+        const prev = value;
+        setValue(next);
+        start(async () => {
+          const r = await quickOwnerAction(id, next);
+          if (!r.ok) setValue(prev);
+        });
+      }}
+    >
+      <option value="">не призначено</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function LeadForm({
   id,
   status,
   owner,
   dealAmount,
   dealCurrency,
+  nextContactAt,
+  lostReason,
   owners,
 }: {
   id: string;
@@ -62,15 +96,20 @@ export function LeadForm({
   owner: string | null;
   dealAmount: string | null;
   dealCurrency: string | null;
+  nextContactAt: string | null;
+  lostReason: string | null;
   owners: string[];
 }) {
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(updateLeadAction, null);
+  const [current, setCurrent] = useState(status);
+  const needsReason = NEEDS_REASON.includes(current as StatusCode);
+  const open = STATUS_BY_CODE[current as StatusCode]?.stage === "open";
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={id} />
       <label className="flex flex-col gap-1 text-[12px] text-muted">
         Статус
-        <select name="status" defaultValue={status} className="input">
+        <select name="status" defaultValue={status} className="input" onChange={(e) => setCurrent(e.target.value)}>
           {STATUSES.map((s) => (
             <option key={s.code} value={s.code}>
               {s.label}
@@ -87,6 +126,23 @@ export function LeadForm({
           ))}
         </datalist>
       </label>
+      {needsReason && (
+        <label className="flex flex-col gap-1 text-[12px] text-muted">
+          Причина відмови
+          <select name="lostReason" defaultValue={lostReason ?? ""} className="input">
+            <option value="">не вказано</option>
+            {(lostReason && !(LOST_REASONS as readonly string[]).includes(lostReason) ? [lostReason, ...LOST_REASONS] : LOST_REASONS).map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {open && (
+        <label className="flex flex-col gap-1 text-[12px] text-muted">
+          Наступний контакт
+          <input type="date" name="nextContactAt" defaultValue={nextContactAt ?? ""} className="input" />
+        </label>
+      )}
       <div className="grid grid-cols-[1fr_90px] gap-2">
         <label className="flex flex-col gap-1 text-[12px] text-muted">
           Сума угоди

@@ -28,12 +28,19 @@ export async function updateLeadAction(_: ActionResult | null, form: FormData): 
   const owner = ownerRaw === null ? undefined : String(ownerRaw).trim() || null;
   const amount = amountRaw === null ? undefined : String(amountRaw).replace(/\s/g, "").replace(",", ".") || null;
   if (amount && Number.isNaN(Number(amount))) return { ok: false, message: "Сума має бути числом" };
+  const nextRaw = form.get("nextContactAt");
+  const nextContactAt = nextRaw === null ? undefined : String(nextRaw).trim() || null;
+  if (nextContactAt && !/^\d{4}-\d{2}-\d{2}$/.test(nextContactAt)) return { ok: false, message: "Невірна дата наступного контакту" };
+  const reasonRaw = form.get("lostReason");
+  const lostReason = reasonRaw === null ? undefined : String(reasonRaw).trim().slice(0, 200) || null;
 
   const { before, events } = await setLeadFields(id, user.email, {
     status,
     owner,
     dealAmount: amount,
     dealCurrency: form.get("dealCurrency") ? String(form.get("dealCurrency")) : undefined,
+    nextContactAt,
+    lostReason,
   });
 
   let message: string | undefined;
@@ -60,6 +67,13 @@ export async function quickStatusAction(id: string, status: StatusCode): Promise
   const form = new FormData();
   form.set("id", id);
   form.set("status", status);
+  return updateLeadAction(null, form);
+}
+
+export async function quickOwnerAction(id: string, owner: string): Promise<ActionResult> {
+  const form = new FormData();
+  form.set("id", id);
+  form.set("owner", owner);
   return updateLeadAction(null, form);
 }
 
@@ -136,6 +150,14 @@ export async function saveRegionAction(_: ActionResult | null, form: FormData): 
 }
 
 /** Add a spreadsheet: every lead tab in it becomes a source for the given region. */
+/** Who receives new leads of a region automatically. */
+export async function setRegionOwnerAction(code: string, owner: string): Promise<ActionResult> {
+  await requireUser("admin");
+  await db.update(regions).set({ defaultOwner: owner.trim().slice(0, 80) || null }).where(eq(regions.code, code));
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
 export async function addSpreadsheetAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {
   await requireUser("admin");
   const raw = String(form.get("spreadsheet") ?? "").trim();

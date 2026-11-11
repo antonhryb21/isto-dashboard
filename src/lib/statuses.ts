@@ -93,3 +93,18 @@ export function parseStatus(raw: string | null | undefined): StatusCode | null {
   if (byLabel) return byLabel.code;
   return ALIASES[key] ?? null;
 }
+
+/** Reasons offered when a lead is closed without a deal; stored as the text itself. */
+export const LOST_REASONS = [
+  "Задорого",
+  "Малий бюджет / не наш масштаб",
+  "Не виходить на звʼязок",
+  "Обрав іншу компанію",
+  "Не та послуга",
+  "Не той регіон",
+  "Відклав / передумав",
+  "Інше",
+] as const;
+
+/** Statuses where a reason is expected. */
+export const NEEDS_REASON: StatusCode[] = ["lost", "not_relevant"];

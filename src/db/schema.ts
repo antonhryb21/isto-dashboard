@@ -33,6 +33,8 @@ export const regions = pgTable("regions", {
   keywords: text("keywords").array().notNull().default([]),
   currency: text("currency").notNull().default("AED"),
   sortOrder: integer("sort_order").notNull().default(0),
+  /** Who gets new Meta leads of this region when nobody is assigned yet. */
+  defaultOwner: text("default_owner"),
 });
 
 /** A Google Sheets tab that lead-form leads land in. */
@@ -83,6 +85,10 @@ export const leads = pgTable(
     dealAmount: numeric("deal_amount", { precision: 14, scale: 2 }),
     dealCurrency: text("deal_currency"),
     firstContactAt: timestamp("first_contact_at", { withTimezone: true }),
+    /** Day the lead should be contacted again (follow-up reminder). */
+    nextContactAt: date("next_contact_at"),
+    /** Why the lead was lost or is not relevant. */
+    lostReason: text("lost_reason"),
     sheetComment: text("sheet_comment"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

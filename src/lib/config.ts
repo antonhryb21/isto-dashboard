@@ -51,3 +51,22 @@ export const DEFAULT_COMPETITORS = [
 export const SLA_MINUTES = Number(process.env.LEAD_SLA_MINUTES ?? 30);
 /** Only recent leads count as overdue; older "New" ones are usually imported history. */
 export const SLA_LOOKBACK_DAYS = 7;
+
+/**
+ * Working time for the response target, in the app timezone. A lead that arrives at night is not overdue
+ * until the team has had SLA_MINUTES of working time. Env: LEAD_WORK_HOURS="9-19", LEAD_WORK_DAYS="1-5" (1 = Monday).
+ */
+export const WORK_HOURS = (() => {
+  const [a, b] = (process.env.LEAD_WORK_HOURS ?? "9-19").split("-").map((v) => Number(v.trim().replace(":30", ".5")));
+  return Number.isFinite(a) && Number.isFinite(b) && b > a ? { start: a, end: b } : { start: 9, end: 19 };
+})();
+export const WORK_DAYS = (() => {
+  const raw = process.env.LEAD_WORK_DAYS ?? "1-5";
+  const days = new Set<number>();
+  for (const part of raw.split(",")) {
+    const [a, b] = part.split("-").map((v) => Number(v.trim()));
+    if (!Number.isInteger(a)) continue;
+    for (let d = a; d <= (Number.isInteger(b) ? b : a); d++) if (d >= 1 && d <= 7) days.add(d);
+  }
+  return days.size ? days : new Set([1, 2, 3, 4, 5]);
+})();

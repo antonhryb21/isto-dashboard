@@ -9,7 +9,8 @@ import { parseStatus, STATUS_BY_CODE } from "@/lib/statuses";
  *
  * POST /api/leads/status
  * Authorization: Bearer <LEADS_API_TOKEN>
- * { "lead_id": "1977622026500180", "status": "Contacted", "changed_by": "@yuliia", "owner": "Max", "comment": "…" }
+ * { "lead_id": "1977622026500180", "status": "Contacted", "changed_by": "@yuliia", "owner": "Max", "comment": "…",
+ *   "next_contact": "2026-11-20", "lost_reason": "Задорого" }
  *
  * lead_id is the Meta leadgen id (with or without the "l:" prefix). status accepts a label
  * ("Follow-up"), a code ("follow_up") or a known alias. owner and comment are optional.
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { lead_id?: unknown; status?: unknown; changed_by?: unknown; owner?: unknown; comment?: unknown };
+  let body: { lead_id?: unknown; status?: unknown; changed_by?: unknown; owner?: unknown; comment?: unknown; next_contact?: unknown; lost_reason?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  const next = body.next_contact === undefined ? undefined : String(body.next_contact ?? "").trim() || null;
+  if (next && !/^\d{4}-\d{2}-\d{2}$/.test(next)) return NextResponse.json({ ok: false, error: "next_contact must be YYYY-MM-DD" }, { status: 400 });
   const author = `telegram:${String(body.changed_by ?? "bot").slice(0, 60)}`;
 
   // The button can be pressed before our own webhook stored the lead; fetch it from Meta then.
@@ -55,6 +58,8 @@ export async function POST(request: NextRequest) {
   await setLeadFields(lead.id, author, {
     status: status ?? undefined,
     owner: body.owner === undefined ? undefined : String(body.owner ?? "").trim() || null,
+    nextContactAt: next,
+    lostReason: body.lost_reason === undefined ? undefined : String(body.lost_reason ?? "").trim().slice(0, 200) || null,
   });
   const comment = String(body.comment ?? "").trim();
   if (comment) await addComment(lead.id, author, comment.slice(0, 4000));

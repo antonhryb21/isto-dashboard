@@ -5,7 +5,9 @@ import { requireUser } from "@/lib/auth/current-user";
 import { listRegions } from "@/lib/regions";
 import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
-import { DeleteTarget, RegionForm, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
+import { owners } from "@/lib/queries";
+import { workTimeLabel } from "@/lib/sla";
+import { DeleteTarget, RegionForm, RegionOwner, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
 import { CsvImport } from "@/components/csv-import";
 import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
 import { listCompetitors } from "@/lib/competitors";
@@ -32,13 +34,14 @@ const ENV = [
 
 export default async function AdminPage() {
   const me = await requireUser("admin");
-  const [people, regions, sources, runs, rivals, plan] = await Promise.all([
+  const [people, regions, sources, runs, rivals, plan, ownerList] = await Promise.all([
     db.select().from(users).orderBy(asc(users.email)),
     listRegions(),
     db.select().from(leadSources).orderBy(asc(leadSources.spreadsheetId), asc(leadSources.sheetName)),
     db.select().from(syncRuns).orderBy(desc(syncRuns.startedAt)).limit(8),
     listCompetitors(),
     listTargets(),
+    owners(),
   ]);
   const regionOpts = regions.map((r) => ({ code: r.code, name: r.name }));
   const webhookUrl = `${process.env.APP_URL ?? ""}/api/webhooks/meta`;
@@ -156,7 +159,16 @@ export default async function AdminPage() {
             </span>
           ))}
         </div>
-        <div className="mt-3">
+        <div className="mt-4 flex flex-col gap-2 text-[13px]">
+          <div className="text-[12px] text-faint">Кому автоматично призначати нові ліди регіону:</div>
+          {regions.map((r) => (
+            <label key={r.code} className="flex items-center gap-3">
+              <span className="w-28">{r.name}</span>
+              <RegionOwner code={r.code} value={r.defaultOwner} owners={ownerList} />
+            </label>
+          ))}
+        </div>
+        <div className="mt-4">
           <RegionForm />
         </div>
       </section>
@@ -165,7 +177,8 @@ export default async function AdminPage() {
         <div className="label">Звіти й тривоги в Telegram</div>
         <p className="mt-1 text-[12px] text-faint">
           Щоранку о 09:30 за Києвом бот надсилає: витрати, ліди і CPL за вчора, прогрес плану місяця і тривоги — CPL вище середнього на 50%+,
-          кампанії, що 3 дні витрачають без лідів, ліди, які чекають контакту довше {process.env.LEAD_SLA_MINUTES ?? 30} хв, збої оновлення даних.
+          кампанії, що 3 дні витрачають без лідів, ліди, які чекають контакту довше {process.env.LEAD_SLA_MINUTES ?? 30} хв робочого часу ({workTimeLabel()}), нагадування про повторний
+          контакт на сьогодні, збої оновлення даних.
           Потрібні змінні TELEGRAM_BOT_TOKEN (токен бота від @BotFather) і TELEGRAM_CHAT_ID (ID групи) у Vercel.
         </p>
         <div className="mt-3">

@@ -10,6 +10,7 @@ import {
   saveRegionAction,
   saveUserAction,
   setSourceRegionAction,
+  setRegionOwnerAction,
   subscribeLeadgenAction,
   syncNowAction,
   toggleSourceAction,
@@ -60,6 +61,25 @@ export function RegionForm() {
       <button className="btn" disabled={pending}>Додати регіон</button>
       <Msg r={state} />
     </form>
+  );
+}
+
+/** Person who automatically gets new leads of a region. */
+export function RegionOwner({ code, value, owners }: { code: string; value: string | null; owners: string[] }) {
+  const [pending, start] = useTransition();
+  const options = value && !owners.includes(value) ? [value, ...owners] : owners;
+  return (
+    <select
+      className="input py-1 text-[12.5px]"
+      defaultValue={value ?? ""}
+      disabled={pending}
+      onChange={(e) => start(async () => void (await setRegionOwnerAction(code, e.target.value)))}
+    >
+      <option value="">нікому (вручну)</option>
+      {options.map((o) => (
+        <option key={o}>{o}</option>
+      ))}
+    </select>
   );
 }
 

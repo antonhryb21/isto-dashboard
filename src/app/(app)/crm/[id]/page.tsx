@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { leadContact } from "@/lib/lead-contact";
+import { leadFlags } from "@/lib/lead-flags";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
@@ -21,6 +22,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const canEdit = hasRole(user.role, "marketing");
   const region = regions.find((r) => r.code === lead.regionCode);
   const c = leadContact(lead);
+  // Hints are for leads still being worked; once someone marked it as junk there is nothing to suggest.
+  const flags = STATUS_BY_CODE[lead.status as StatusCode]?.stage === "junk" ? [] : leadFlags(lead);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -40,6 +43,17 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       </div>
+
+      {flags.length > 0 && (
+        <div className="card flex flex-col gap-1 border-warn/50 p-4 text-[13px]">
+          {flags.map((fl) => (
+            <div key={fl.code}>
+              <span className="font-medium text-warn first-letter:uppercase">{fl.label}.</span> <span className="text-muted">{fl.hint}</span>
+            </div>
+          ))}
+          <div className="text-[12px] text-faint">Це підказка, статус не змінено. Якщо підтверджується — оберіть {flags.map((fl) => label(fl.suggest)).join(" або ")}.</div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <div className="flex flex-col gap-4">
@@ -107,6 +121,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                         Відповідальний: {e.fromValue ?? "—"} → <b>{e.toValue ?? "—"}</b>
                       </>
                     )}
+                    {e.type === "next" && (
+                      <>
+                        Наступний контакт: {e.fromValue ?? "—"} → <b>{e.toValue ?? "—"}</b>
+                      </>
+                    )}
+                    {e.type === "reason" && (
+                      <>
+                        Причина відмови: <b>{e.toValue ?? "—"}</b>
+                      </>
+                    )}
                     {e.type === "amount" && (
                       <>
                         Сума угоди: {e.fromValue ?? "—"} → <b>{e.toValue ?? "—"}</b>
@@ -128,6 +152,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 owner={lead.owner}
                 dealAmount={lead.dealAmount}
                 dealCurrency={lead.dealCurrency ?? region?.currency ?? "AED"}
+                nextContactAt={lead.nextContactAt}
+                lostReason={lead.lostReason}
                 owners={ownerList}
               />
             </section>
@@ -165,6 +191,7 @@ function authorLabel(a: string | null) {
   if (a === "sheet") return "Google Таблиця";
   if (a === "import") return "імпорт історії";
   if (a === "meta") return "Meta";
+  if (a === "auto") return "автопризначення";
   if (a.startsWith("telegram:")) return `Telegram ${a.slice(9)}`;
   return a;
 }

@@ -34,6 +34,17 @@ export function leadContact(l: LeadLike) {
   const phone = fromAnswers(PATTERNS.phone);
   const email = fromAnswers(PATTERNS.email);
   const city = fromAnswers(PATTERNS.city);
-  const interest = Object.fromEntries(Object.entries(l.answers ?? {}).filter(([q]) => !used.has(q)));
+  const interest = Object.fromEntries(
+    Object.entries(l.answers ?? {})
+      .filter(([q]) => !used.has(q))
+      .map(([q, a]) => [q, prettyAnswer(a)]),
+  );
   return { name: l.fullName || name, phone: l.phone || phone, email: l.email || email, city: l.city || city, interest };
+}
+
+/** Form option codes ("apartment_/_penthouse", "both_of_it") as readable text. Free-text answers are left alone. */
+export function prettyAnswer(a: string) {
+  if (!a || /\s/.test(a.trim()) || !a.includes("_")) return a;
+  const t = a.replace(/_\/_/g, " / ").replace(/_&_/g, " & ").replace(/_/g, " ").trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
