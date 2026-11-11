@@ -22,6 +22,9 @@ const STAGE: Partial<Record<StatusCode, string>> = {
   lost: "Lost",
 };
 
+/** The stage names this dashboard sends, so they can be checked against events already in a dataset. */
+export const CRM_STAGE_NAMES = [...new Set(Object.values(STAGE))] as string[];
+
 export const crmEventsEnabled = () => Boolean(process.env.META_CRM_DATASET_ID && process.env.META_SYSTEM_USER_TOKEN);
 
 function proof(token: string) {

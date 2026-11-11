@@ -7,6 +7,7 @@ import { ago, fmtDate } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { owners } from "@/lib/queries";
 import { workTimeLabel } from "@/lib/sla";
+import { CRM_STAGE_NAMES } from "@/lib/meta/crm-events";
 import { CheckCrmDataset, DeleteTarget, RegionForm, RegionOwner, RemoveUser, SendDigestButton, TargetForm, SourceRegion, SourceToggle, SpreadsheetForm, SyncButtons, UserForm } from "@/components/admin-controls";
 import { CsvImport } from "@/components/csv-import";
 import { CompetitorForm, RemoveCompetitor } from "@/components/competitor-controls";
@@ -80,9 +81,11 @@ export default async function AdminPage() {
         )}
         {!process.env.META_CRM_DATASET_ID && (
           <p className="mt-2 text-[12px] text-faint">
-            Щоб Meta оптимізувала рекламу під якісні ліди, а не під дешеві заявки: в Events Manager створіть набір даних типу CRM, у його налаштуваннях
-            візьміть ID і додайте у Vercel як META_CRM_DATASET_ID. Кампанії на ліди мають бути з оптимізацією «конверсійні ліди». Дашборд надсилає лише
-            ID ліда і новий статус — без імен, телефонів і пошти.
+            Щоб Meta оптимізувала рекламу під якісні ліди, а не під дешеві заявки: в Events Manager → «Підключити джерела даних» → CRM створіть новий
+            набір даних або переведіть наявний (його історія при цьому зберігається), візьміть ID і додайте у Vercel як META_CRM_DATASET_ID. Кампанії на
+            ліди мають бути з оптимізацією «конверсійні ліди». Дашборд надсилає лише ID ліда і назву етапу — без імен, телефонів і пошти. Етапи:{" "}
+            <span className="text-muted">{CRM_STAGE_NAMES.join(", ")}</span>. Якщо берете наявний набір, ці назви не мають збігатися з подіями, які вже
+            в ньому є.
           </p>
         )}
         <p className="mt-2 text-[12px] text-faint">
