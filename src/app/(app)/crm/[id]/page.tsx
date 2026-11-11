@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { leadContact } from "@/lib/lead-contact";
 import { leadFlags } from "@/lib/lead-flags";
+import { platformLabel } from "@/lib/lead-source";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
@@ -38,7 +39,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             <StatusBadge status={lead.status} />
             <span>{fmtDate(lead.createdTime, true)}</span>
             {region && <span>{region.name}</span>}
-            {lead.platform && <span>{lead.platform === "ig" ? "Instagram" : lead.platform === "fb" ? "Facebook" : lead.platform}</span>}
+            {lead.platform && <span>{platformLabel(lead.platform)}</span>}
+            {lead.source === "manual" && <span className="text-faint">додано вручну</span>}
             {lead.dealAmount && <span className="text-accent">{fmtMoney(Number(lead.dealAmount), lead.dealCurrency ?? "AED")}</span>}
           </div>
         </div>
@@ -165,7 +167,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <img src={ad.thumbnailUrl} alt="" className="mt-3 aspect-square w-full rounded-lg object-cover" />
             )}
             <dl className="mt-3 flex flex-col gap-2">
-              <Row k="Кампанія" v={lead.isOrganic ? "органіка" : lead.campaignName} />
+              <Row k="Кампанія" v={lead.source === "manual" ? `додано вручну · ${platformLabel(lead.platform) ?? "інше"}` : lead.isOrganic ? "органіка" : lead.campaignName} />
               <Row k="Група" v={lead.adsetName} />
               <Row k="Оголошення" v={lead.adName} />
               <Row k="Форма" v={lead.formName} />

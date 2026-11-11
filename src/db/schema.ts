@@ -59,6 +59,8 @@ export const leads = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     metaLeadId: text("meta_lead_id"),
+    /** Where the record came from: "meta" (lead form), "manual" (added by hand in the CRM). */
+    source: text("source").notNull().default("meta"),
     sourceId: uuid("source_id").references(() => leadSources.id),
     sheetRow: integer("sheet_row"),
     createdTime: timestamp("created_time", { withTimezone: true }).notNull(),

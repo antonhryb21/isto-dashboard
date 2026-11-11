@@ -50,6 +50,13 @@
       "when": 1794386226804,
       "tag": "0006_crm_followup",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794388065828,
+      "tag": "0007_manual_leads",
+      "breakpoints": true
     }
   ]
 }

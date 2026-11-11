@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leadEvents, leads, regions, type Lead } from "@/db/schema";
 import { normalizeStatus, type StatusCode } from "@/lib/statuses";
+import { INTEREST_QUESTION, phoneKey } from "@/lib/lead-source";
 
 export type IncomingLead = {
   metaLeadId: string;
@@ -115,6 +116,73 @@ export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" |
   await db.update(leads).set(patch).where(eq(leads.id, existing.id));
   if (events.length) await db.insert(leadEvents).values(events);
   return "updated";
+}
+
+export type ManualLead = {
+  fullName: string | null;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  regionCode: string | null;
+  platform: string | null;
+  interest: string | null;
+  owner: string | null;
+  status: StatusCode;
+  createdTime: Date;
+  comment: string | null;
+};
+
+/** A lead already in the CRM with the same phone (last 9 digits) or e-mail. */
+export async function findDuplicate(phone: string | null, email: string | null) {
+  const key = phoneKey(phone);
+  const mail = email?.trim().toLowerCase() || null;
+  if (!key && !mail) return null;
+  const checks = [
+    key ? sql`right(regexp_replace(coalesce(${leads.phone}, ''), '[^0-9]', '', 'g'), 9) = ${key}` : null,
+    mail ? sql`lower(${leads.email}) = ${mail}` : null,
+  ].filter(Boolean) as ReturnType<typeof sql>[];
+  const [row] = await db
+    .select({ id: leads.id, fullName: leads.fullName, createdTime: leads.createdTime, status: leads.status })
+    .from(leads)
+    .where(or(...checks))
+    .orderBy(desc(leads.createdTime))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * A lead typed in by hand (an incoming call, a referral, a direct message).
+ * Marked `source: "manual"` so it is not counted as a result of ad spend.
+ */
+export async function createLead(input: ManualLead, author: string) {
+  const [row] = await db
+    .insert(leads)
+    .values({
+      source: "manual",
+      createdTime: input.createdTime,
+      regionCode: input.regionCode,
+      platform: input.platform,
+      isOrganic: true,
+      fullName: input.fullName,
+      phone: input.phone,
+      email: input.email,
+      city: input.city,
+      answers: input.interest ? { [INTEREST_QUESTION]: input.interest } : {},
+      status: input.status,
+      owner: input.owner,
+      // Added already contacted: the first contact is now, so response speed stays honest.
+      statusUpdatedAt: input.status === "new" ? null : new Date(),
+      firstContactAt: input.status === "new" ? null : new Date(),
+    })
+    .returning({ id: leads.id });
+
+  const events: (typeof leadEvents.$inferInsert)[] = [
+    { leadId: row.id, type: "created", toValue: input.status, author, createdAt: new Date() },
+  ];
+  if (input.owner) events.push({ leadId: row.id, type: "owner", toValue: input.owner, author });
+  if (input.comment) events.push({ leadId: row.id, type: "comment", text: input.comment, author });
+  await db.insert(leadEvents).values(events);
+  return row.id;
 }
 
 /** Change a lead from the CRM screen. Returns the old value for the event log. */

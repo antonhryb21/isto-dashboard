@@ -64,7 +64,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     tired && { tone: "warn", text: `${tired} ${plural(tired, ["активний креатив втомився", "активні креативи втомились", "активних креативів втомились"])}: CTR за тиждень упав на 30%+`, href: "/creatives?sort=tired" },
     !plan && isAdmin && { tone: "info", text: "План на цей місяць не задано: без нього не видно темпу бюджету й лідів", href: "/admin" },
   ].filter(Boolean) as { tone: "bad" | "warn" | "info"; text: string; href: string }[];
-  const fewQualified = crm.qualified > 0 && crm.qualified < MIN_SAMPLE;
+  const fewQualified = crm.adQualified > 0 && crm.adQualified < MIN_SAMPLE;
 
   const cur = ad.currency;
   // "0" only when there really were no results; "—" when there is nothing to compute from.
@@ -73,10 +73,11 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   const moneyPrev = romiFor(adPrev.spend, cur, crmPrev.revenueByCurrency);
   const crmLeads = crm.total - crm.junk;
   const crmLeadsPrev = crmPrev.total - crmPrev.junk;
-  const cplReal = crmLeads ? ad.spend / crmLeads : 0;
-  const cplRealPrev = crmLeadsPrev ? adPrev.spend / crmLeadsPrev : 0;
-  const costQualified = crm.qualified ? ad.spend / crm.qualified : 0;
-  const costQualifiedPrev = crmPrev.qualified ? adPrev.spend / crmPrev.qualified : 0;
+  // Cost metrics count only leads the ads brought; leads typed in by hand are left out.
+  const cplReal = crm.adLeads ? ad.spend / crm.adLeads : 0;
+  const cplRealPrev = crmPrev.adLeads ? adPrev.spend / crmPrev.adLeads : 0;
+  const costQualified = crm.adQualified ? ad.spend / crm.adQualified : 0;
+  const costQualifiedPrev = crmPrev.adQualified ? adPrev.spend / crmPrev.adQualified : 0;
 
   // Merge spend (ads) and leads (CRM) by day for the chart.
   const byDay = new Map<string, { date: string; spend: number; leads: number; qualified: number }>();
@@ -131,8 +132,16 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Витрати" value={fmtMoney(ad.spend, cur)} current={ad.spend} previous={adPrev.spend} empty={noAds} hint={noAds ? "немає даних реклами за період" : undefined} />
-        <Kpi label="Ліди (без спаму)" value={fmtInt(crmLeads)} current={crmLeads} previous={crmLeadsPrev} hint={`${fmtInt(crm.total)} усього заявок`} />
-        <Kpi label="Ціна ліда" value={fmtMoney(cplReal, cur)} current={cplReal} previous={cplRealPrev} goodWhenDown empty={noAds || !crmLeads} hint={ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : undefined} />
+        <Kpi label="Ліди (без спаму)" value={fmtInt(crmLeads)} current={crmLeads} previous={crmLeadsPrev} hint={`${fmtInt(crm.total)} усього заявок${crm.manual ? ` · ${fmtInt(crm.manual)} вручну` : ""}`} />
+        <Kpi
+          label="Ціна ліда"
+          value={fmtMoney(cplReal, cur)}
+          current={cplReal}
+          previous={cplRealPrev}
+          goodWhenDown
+          empty={noAds || !crm.adLeads}
+          hint={[ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : null, crm.manual ? "без доданих вручну" : null].filter(Boolean).join(" · ") || undefined}
+        />
         <Kpi
           label="Ціна якісного ліда"
           value={`${fewQualified ? "≈ " : ""}${fmtMoney(costQualified, cur)}`}
@@ -140,8 +149,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           previous={fewQualified ? undefined : costQualifiedPrev}
           goodWhenDown
           accent={!fewQualified}
-          empty={noAds || !crm.qualified}
-          hint={fewQualified ? `лише ${fmtInt(crm.qualified)} якісних — орієнтир, не результат` : `${fmtInt(crm.qualified)} якісних`}
+          empty={noAds || !crm.adQualified}
+          hint={fewQualified ? `лише ${fmtInt(crm.adQualified)} якісних — орієнтир, не результат` : `${fmtInt(crm.qualified)} якісних`}
         />
         <Kpi label="Зустрічі" value={fmtInt(crm.meetings)} current={crm.meetings} previous={crmPrev.meetings} />
         <Kpi label="Угоди" value={fmtInt(crm.won)} current={crm.won} previous={crmPrev.won} hint={money.revenue ? `виручка ${fmtMoney(money.revenue, cur)}` : undefined} />

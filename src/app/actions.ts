@@ -1,16 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { sendLeadStage } from "@/lib/meta/crm-events";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
-import { addComment, setLeadFields } from "@/lib/leads";
+import { addComment, createLead, findDuplicate, setLeadFields } from "@/lib/leads";
+import { LEAD_PLATFORMS } from "@/lib/lead-source";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
 import { writeBackLead, discoverSources } from "@/lib/sheets/sync";
-import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
+import { STATUS_BY_CODE, parseStatus, type StatusCode } from "@/lib/statuses";
 import { ensureSeed, runSync, type SyncKind } from "@/lib/sync";
 import { syncCompetitors } from "@/lib/meta/competitors";
 import { sendDigest } from "@/lib/digest";
@@ -19,6 +21,57 @@ import { aiEnabled, generateInsights, MANUAL_COOLDOWN_MINUTES, recentManualRun }
 export type ActionResult = { ok: boolean; message?: string };
 
 // ---------- CRM ----------
+
+export type CreateLeadResult = ActionResult & { duplicateId?: string };
+
+/** A lead typed in by hand on the CRM page: an incoming call, a referral, a direct message. */
+export async function createLeadAction(_: CreateLeadResult | null, form: FormData): Promise<CreateLeadResult> {
+  const user = await requireUser("marketing");
+  const text = (k: string, max = 200) => String(form.get(k) ?? "").trim().slice(0, max) || null;
+
+  const phone = text("phone", 40);
+  const email = text("email", 120);
+  if (!phone && !email) return { ok: false, message: "Потрібен хоча б телефон або пошта" };
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, message: "Невірна адреса пошти" };
+
+  const status = parseStatus(String(form.get("status") ?? "new")) ?? "new";
+  const platformRaw = text("platform", 20);
+  const platform = LEAD_PLATFORMS.some((p) => p.code === platformRaw) ? platformRaw : null;
+  const iso = text("createdTimeIso", 40);
+  const createdTime = iso && !Number.isNaN(Date.parse(iso)) ? new Date(iso) : new Date();
+  if (createdTime.getTime() > Date.now() + 60_000) return { ok: false, message: "Дата в майбутньому" };
+
+  if (form.get("force") !== "1") {
+    const dup = await findDuplicate(phone, email);
+    if (dup) {
+      return {
+        ok: false,
+        duplicateId: dup.id,
+        message: `Такий контакт уже є: ${dup.fullName ?? "без імені"} від ${dup.createdTime.toLocaleDateString("uk-UA")}`,
+      };
+    }
+  }
+
+  const id = await createLead(
+    {
+      fullName: text("fullName", 120),
+      phone,
+      email,
+      city: text("city", 80),
+      regionCode: text("region", 40),
+      platform,
+      interest: text("interest", 500),
+      owner: text("owner", 80),
+      status,
+      createdTime,
+      comment: text("comment", 2000),
+    },
+    user.email,
+  );
+  revalidatePath("/crm");
+  revalidatePath("/");
+  redirect(`/crm/${id}`);
+}
 
 export async function updateLeadAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {
   const user = await requireUser("marketing");

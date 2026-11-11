@@ -81,7 +81,7 @@ export async function buildSnapshot() {
         change("ліди за Meta", "шт", adPrev.metaLeads, ad.metaLeads),
         change("ціна ліда за Meta (metaCpl)", money, adPrev.metaLeads ? r0(adPrev.cpl) : null, ad.metaLeads ? r0(ad.cpl) : null),
         change("реальні ліди в CRM (без спаму)", "шт", realPrev, real),
-        change("ціна реального ліда в CRM", money, realPrev ? r0(adPrev.spend / realPrev) : null, real ? r0(ad.spend / real) : null),
+        change("ціна реального ліда в CRM", money, crmPrev.adLeads ? r0(adPrev.spend / crmPrev.adLeads) : null, crm.adLeads ? r0(ad.spend / crm.adLeads) : null),
         change("якісні ліди", "шт", crmPrev.qualified, crm.qualified),
         change("CTR", "%", pct(adPrev.ctr), pct(ad.ctr)),
       ],
@@ -90,8 +90,8 @@ export async function buildSnapshot() {
         prev30: { spend: r0(adPrev.spend), impressions: adPrev.impressions, linkClicks: adPrev.linkClicks, ctrPct: pct(adPrev.ctr), cpm: r2(adPrev.cpm), metaLeads: adPrev.metaLeads, metaCpl: r0(adPrev.cpl) },
       },
       crm: {
-        last30: { leads: crm.total, junk: crm.junk, realLeads: real, qualified: crm.qualified, meetings: crm.meetings, won: crm.won, revenue: crm.revenueByCurrency, costPerRealLead: real ? r0(ad.spend / real) : null, costPerQualified: crm.qualified ? r0(ad.spend / crm.qualified) : null },
-        prev30: { leads: crmPrev.total, junk: crmPrev.junk, realLeads: realPrev, qualified: crmPrev.qualified, meetings: crmPrev.meetings, won: crmPrev.won, revenue: crmPrev.revenueByCurrency, costPerRealLead: realPrev ? r0(adPrev.spend / realPrev) : null, costPerQualified: crmPrev.qualified ? r0(adPrev.spend / crmPrev.qualified) : null },
+        last30: { leads: crm.total, junk: crm.junk, realLeads: real, addedByHand: crm.manual, qualified: crm.qualified, meetings: crm.meetings, won: crm.won, revenue: crm.revenueByCurrency, costPerRealLead: crm.adLeads ? r0(ad.spend / crm.adLeads) : null, costPerQualified: crm.adQualified ? r0(ad.spend / crm.adQualified) : null },
+        prev30: { leads: crmPrev.total, junk: crmPrev.junk, realLeads: realPrev, addedByHand: crmPrev.manual, qualified: crmPrev.qualified, meetings: crmPrev.meetings, won: crmPrev.won, revenue: crmPrev.revenueByCurrency, costPerRealLead: crmPrev.adLeads ? r0(adPrev.spend / crmPrev.adLeads) : null, costPerQualified: crmPrev.adQualified ? r0(adPrev.spend / crmPrev.adQualified) : null },
         responseMedianWorkMinutes: r0(speed.medianMinutes),
       },
       weekly: weeks.map((w) => {
@@ -158,7 +158,7 @@ export async function buildSnapshot() {
       statusCountsLast30: statuses,
       responseByOwner: owners.map((o) => ({ owner: o.owner ?? "не призначено", leads: o.total, contacted: o.contacted, medianMinutes: r0(o.medianMinutes), withinSlaPct: pct(o.slaShare), waiting: o.waiting })),
       overdueNowCount: overdue.length,
-      note: "medianMinutes і overdue рахуються в робочих хвилинах (нічні ліди не штрафуються).",
+      note: "medianMinutes і overdue рахуються в робочих хвилинах (нічні ліди не штрафуються). addedByHand — ліди, додані в CRM вручну (дзвінок, рекомендація); у вартість реклами вони не входять.",
     },
     organicSocial: {
       last30: social,

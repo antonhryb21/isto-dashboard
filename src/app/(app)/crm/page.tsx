@@ -14,6 +14,8 @@ import { fmtDate, fmtInt, fmtPct, plural } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
 import { OwnerSelect, StatusBadge, StatusSelect } from "@/components/crm-controls";
+import { NewLeadButton } from "@/components/new-lead";
+import { platformLabel } from "@/lib/lead-source";
 import { leadContact } from "@/lib/lead-contact";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -69,13 +71,16 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
         title="CRM · ліди"
         sub="Усі ліди ISTO: нові приходять з Meta, статуси змінюються тут або кнопками Telegram-бота."
         right={
-          <div className="flex gap-1">
-            <Link className="chip" data-active={view === "list"} href={qs({ view: null })}>
-              Список
-            </Link>
-            <Link className="chip" data-active={view === "board"} href={qs({ view: "board" })}>
-              Дошка
-            </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              <Link className="chip" data-active={view === "list"} href={qs({ view: null })}>
+                Список
+              </Link>
+              <Link className="chip" data-active={view === "board"} href={qs({ view: "board" })}>
+                Дошка
+              </Link>
+            </div>
+            {canEdit && <NewLeadButton regions={regions.map((r) => ({ code: r.code, name: r.name }))} owners={ownerList} me={me} />}
           </div>
         }
       />
@@ -191,7 +196,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                     {Object.values(leadContact(l).interest).slice(0, 2).join(" · ") || "—"}
                   </td>
                   <td className="max-w-40 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
-                    {l.isOrganic ? "органіка" : l.campaignName ?? "—"}
+                    {l.source === "manual" ? `вручну · ${platformLabel(l.platform) ?? "інше"}` : l.isOrganic ? "органіка" : l.campaignName ?? "—"}
                   </td>
                   <td>
                     <OwnerSelect id={l.id} owner={l.owner} owners={ownerList} disabled={!canEdit} />

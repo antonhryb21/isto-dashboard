@@ -4,6 +4,7 @@ import { leadFlags } from "@/lib/lead-flags";
 import { businessMinutes, isWorkingTime, slaCutoff } from "@/lib/sla";
 import { normalizeStatus, parseStatus } from "@/lib/statuses";
 import { romiMath } from "@/lib/money";
+import { phoneKey, platformLabel } from "@/lib/lead-source";
 
 // App timezone defaults to Asia/Dubai (UTC+4), working time Mon–Fri 9:00–19:00.
 const dubai = (iso: string) => new Date(iso + "+04:00");
@@ -73,5 +74,19 @@ describe("money", () => {
   it("ROMI ignores revenue in another currency", () => {
     expect(romiMath(1000, "AED", { AED: 3000, USD: 500 })).toEqual({ revenue: 3000, otherCurrency: true, romi: 2 });
     expect(romiMath(1000, "AED", {}).romi).toBeNull();
+  });
+});
+
+describe("manual leads", () => {
+  it("phone key matches the same number written differently", () => {
+    expect(phoneKey("+971 55 998 48 42")).toBe(phoneKey("0559984842"));
+    expect(phoneKey("+971559984842")).toBe("559984842");
+    expect(phoneKey("12345")).toBeNull();
+    expect(phoneKey(null)).toBeNull();
+  });
+  it("names the source of a hand-typed lead", () => {
+    expect(platformLabel("call")).toBe("Дзвінок");
+    expect(platformLabel("ig")).toBe("Instagram");
+    expect(platformLabel(null)).toBeNull();
   });
 });
