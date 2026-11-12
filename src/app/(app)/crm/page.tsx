@@ -15,6 +15,7 @@ import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
 import { OwnerSelect, StatusBadge, StatusSelect } from "@/components/crm-controls";
 import { NewLeadButton } from "@/components/new-lead";
+import { StatusChart } from "@/components/status-chart";
 import { platformLabel } from "@/lib/lead-source";
 import { leadContact } from "@/lib/lead-contact";
 
@@ -42,7 +43,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
   const [regions, all, counts, speed, ownerList, overdue, byOwner, due, reasons] = await Promise.all([
     listRegions(),
     leadList(f, { status: view === "list" && !special ? status : null, owner, overdue: overdueOnly, due: dueOnly, limit: 2000 }),
-    statusCounts(f),
+    statusCounts(f, { owner, search: true }),
     responseSpeed(f),
     owners(),
     overdueLeads(f.region),
@@ -129,6 +130,8 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
           </Link>
         </div>
       )}
+
+      <StatusChart counts={counts} active={view === "list" && !special ? status : null} href={(code) => qs({ status: code, view: null, overdue: null, due: null, lp: null })} />
 
       <div className="flex flex-wrap items-center gap-1">
         {view === "list" && (

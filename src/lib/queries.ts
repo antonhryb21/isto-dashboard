@@ -337,11 +337,22 @@ export async function leadList(
     .limit(opts.limit ?? 500);
 }
 
-export async function statusCounts(f: Filters) {
+/**
+ * Leads per status for the period. On the CRM page it also follows the owner chips and the search box,
+ * so the chart and the status chips always count the same leads the list shows.
+ */
+export async function statusCounts(f: Filters, opts: { owner?: string | null; search?: boolean } = {}) {
+  const w = leadWhere(f, f.from, f.to);
+  if (opts.owner === "-") w.push(sql`(${leads.owner} is null or ${leads.owner} = '')`);
+  else if (opts.owner) w.push(eq(leads.owner, opts.owner));
+  if (opts.search && f.q) {
+    const like = `%${f.q}%`;
+    w.push(or(ilike(leads.fullName, like), ilike(leads.phone, like), ilike(leads.email, like), ilike(leads.city, like))!);
+  }
   const rows = await db
     .select({ status: leads.status, n: sql<string>`count(*)` })
     .from(leads)
-    .where(and(...leadWhere(f, f.from, f.to)))
+    .where(and(...w))
     .groupBy(leads.status);
   return Object.fromEntries(rows.map((r) => [r.status, num(r.n)])) as Record<string, number>;
 }
