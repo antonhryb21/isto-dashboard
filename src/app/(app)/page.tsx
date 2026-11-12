@@ -72,7 +72,6 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   const money = romiFor(ad.spend, cur, crm.revenueByCurrency);
   const moneyPrev = romiFor(adPrev.spend, cur, crmPrev.revenueByCurrency);
   const crmLeads = crm.total - crm.junk;
-  const crmLeadsPrev = crmPrev.total - crmPrev.junk;
   // Cost metrics count only leads the ads brought; leads typed in by hand are left out.
   const cplReal = crm.adLeads ? ad.spend / crm.adLeads : 0;
   const cplRealPrev = crmPrev.adLeads ? adPrev.spend / crmPrev.adLeads : 0;
@@ -132,7 +131,13 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Витрати" value={fmtMoney(ad.spend, cur)} current={ad.spend} previous={adPrev.spend} empty={noAds} hint={noAds ? "немає даних реклами за період" : undefined} />
-        <Kpi label="Ліди (без спаму)" value={fmtInt(crmLeads)} current={crmLeads} previous={crmLeadsPrev} hint={`${fmtInt(crm.total)} усього заявок${crm.manual ? ` · ${fmtInt(crm.manual)} вручну` : ""}`} />
+        <Kpi
+          label="Ліди (усього)"
+          value={fmtInt(crm.total)}
+          current={crm.total}
+          previous={crmPrev.total}
+          hint={`${fmtInt(crmLeads)} без спаму${crm.manual ? ` · ${fmtInt(crm.manual)} вручну` : ""}`}
+        />
         <Kpi
           label="Ціна ліда"
           value={fmtMoney(cplReal, cur)}
