@@ -73,8 +73,10 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   const moneyPrev = romiFor(adPrev.spend, cur, crmPrev.revenueByCurrency);
   const crmLeads = crm.total - crm.junk;
   // Cost metrics count only leads the ads brought; leads typed in by hand are left out.
+  // Same base as the "Ліди (усього)" card: every lead the ads brought, spam included.
+  const cpl = crm.adAll ? ad.spend / crm.adAll : 0;
+  const cplPrev = crmPrev.adAll ? adPrev.spend / crmPrev.adAll : 0;
   const cplReal = crm.adLeads ? ad.spend / crm.adLeads : 0;
-  const cplRealPrev = crmPrev.adLeads ? adPrev.spend / crmPrev.adLeads : 0;
   const costQualified = crm.adQualified ? ad.spend / crm.adQualified : 0;
   const costQualifiedPrev = crmPrev.adQualified ? adPrev.spend / crmPrev.adQualified : 0;
 
@@ -140,12 +142,20 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         />
         <Kpi
           label="Ціна ліда"
-          value={fmtMoney(cplReal, cur)}
-          current={cplReal}
-          previous={cplRealPrev}
+          value={fmtMoney(cpl, cur)}
+          current={cpl}
+          previous={cplPrev}
           goodWhenDown
-          empty={noAds || !crm.adLeads}
-          hint={[ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : null, crm.manual ? "без доданих вручну" : null].filter(Boolean).join(" · ") || undefined}
+          empty={noAds || !crm.adAll}
+          hint={
+            [
+              crm.adLeads ? `без спаму: ${fmtMoney(cplReal, cur)}` : null,
+              ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : null,
+              crm.manual ? "без доданих вручну" : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
         />
         <Kpi
           label="Ціна якісного ліда"
