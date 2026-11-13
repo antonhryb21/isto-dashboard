@@ -29,6 +29,8 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
     sortKey === "tired"
       ? [...rowsRaw].sort((a, b) => Number(!!fatigue.get(b.id)?.tired) - Number(!!fatigue.get(a.id)?.tired) || b.spend - a.spend)
       : [...rowsRaw].sort(SORTS[sortKey].fn);
+  const active = rows.filter((c) => isRunning(c.status));
+  const stopped = rows.filter((c) => !isRunning(c.status));
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,79 +57,107 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
       {rows.length === 0 ? (
         <Empty>Оголошень з показами за цей період немає.</Empty>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {rows.map((c) => (
-            <article key={c.id} className="card overflow-hidden flex flex-col">
-              <a href={c.permalink ?? undefined} target="_blank" rel="noreferrer" className="relative block bg-panel-2">
-                {c.thumbnail ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.thumbnail} alt="" className="aspect-square w-full object-cover" loading="lazy" />
-                ) : (
-                  <div className="aspect-square" />
-                )}
-                {c.isVideo && (
-                  <span className="absolute right-2 top-2 rounded-full bg-overlay p-1.5">
-                    <Play size={12} fill="white" />
-                  </span>
-                )}
-                {fatigue.get(c.id)?.tired && c.status === "ACTIVE" && (
-                  <span
-                    className="absolute bottom-2 left-2 rounded-full bg-bad px-2 py-0.5 text-[11px] text-white"
-                    title="Крутиться 14+ днів, CTR за тиждень упав на 30%+ — час оновити креатив"
-                  >
-                    втомився
-                  </span>
-                )}
-                {adStatusLabel(c.status) && (
-                  <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">{adStatusLabel(c.status)}</span>
-                )}
-              </a>
-              <div className="flex flex-1 flex-col p-3">
-                <div className="truncate text-[13px] font-medium" title={c.name}>
-                  {c.name}
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          {[
+            { title: "Активні", list: active, empty: "Активних оголошень з показами за цей період немає." },
+            { title: "На паузі", list: stopped, empty: "Усі оголошення з показами за період зараз активні." },
+          ].map((col) => (
+            <section key={col.title} className="flex min-w-0 flex-col gap-3">
+              <h2 className="flex items-baseline gap-2 text-[16px] font-medium">
+                {col.title}
+                <span className="text-[13px] font-normal text-faint">{fmtInt(col.list.length)}</span>
+              </h2>
+              {col.list.length === 0 ? (
+                <Empty>{col.empty}</Empty>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                  {col.list.map((c) => (
+                    <CreativeCard key={c.id} c={c} fatigue={fatigue} />
+                  ))}
                 </div>
-                <div className="truncate text-[12px] text-faint" title={c.campaignName ?? ""}>
-                  {c.campaignName}
-                </div>
-                {c.body && <p className="mt-1.5 line-clamp-1 text-[12px] text-muted" title={c.body}>{c.body}</p>}
-                {(() => {
-                  const fa = fatigue.get(c.id);
-                  if (!fa || fa.ctr7 === null) return null;
-                  return (
-                    <div className="mt-2 flex flex-wrap gap-x-3 text-[11.5px] text-faint">
-                      <span>{fa.daysRunning} дн у показі</span>
-                      {fa.ctrChange !== null && (
-                        <span className={fa.ctrChange <= -0.3 ? "text-bad" : fa.ctrChange >= 0.1 ? "text-good" : ""}>
-                          CTR за тиждень {fa.ctrChange > 0 ? "▲" : "▼"} {fmtPct(Math.abs(fa.ctrChange), 0)}
-                        </span>
-                      )}
-                      {fa.frequency !== null && <span title="Покази ÷ охоплення, в середньому за день за останній тиждень">частота {fa.frequency.toFixed(1)}/день</span>}
-                    </div>
-                  );
-                })()}
-                <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
-                  <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
-                  <Stat k="CTR" v={fmtPct(c.ctr, 2)} />
-                  <Stat k="Ліди Meta" v={fmtInt(c.metaLeads)} />
-                  <Stat k="Ліди CRM" v={fmtInt(c.crm.total)} />
-                  <Stat k="Якісні" v={fmtInt(c.crm.qualified)} strong />
-                  <Stat
-                    k="Ціна якісного"
-                    v={c.costPerQualified ? `${c.crm.qualified < MIN_SAMPLE ? "≈ " : ""}${fmtMoney(c.costPerQualified, c.currency)}` : "—"}
-                    strong={c.crm.qualified >= MIN_SAMPLE}
-                    title={c.crm.qualified && c.crm.qualified < MIN_SAMPLE ? `Лише ${c.crm.qualified} якісних: орієнтир, а не результат` : undefined}
-                  />
-                  <Stat k="Угоди" v={c.crm.won ? fmtInt(c.crm.won) : "—"} />
-                  <Stat k="Виручка" v={c.revenue ? fmtMoney(c.revenue, c.currency) : "—"} />
-                  <Stat k="ROMI" v={c.romi === null ? "—" : `${c.romi > 0 ? "+" : ""}${Math.round(c.romi * 100)}%`} strong />
-                </dl>
-              </div>
-            </article>
+              )}
+            </section>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+/** Delivering or about to: everything Meta has not stopped (paused, archived, deleted, rejected). */
+const RUNNING = new Set(["ACTIVE", "IN_PROCESS", "PENDING_REVIEW", "PREAPPROVED", "WITH_ISSUES", "PENDING_BILLING_INFO"]);
+function isRunning(status: string | null | undefined) {
+  return RUNNING.has((status ?? "").toUpperCase());
+}
+
+function CreativeCard({ c, fatigue }: { c: Row; fatigue: Awaited<ReturnType<typeof creativeFatigue>> }) {
+  return (
+    <article className="card overflow-hidden flex flex-col">
+      <a href={c.permalink ?? undefined} target="_blank" rel="noreferrer" className="relative block bg-panel-2">
+        {c.thumbnail ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={c.thumbnail} alt="" className="aspect-square w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="aspect-square" />
+        )}
+        {c.isVideo && (
+          <span className="absolute right-2 top-2 rounded-full bg-overlay p-1.5">
+            <Play size={12} fill="white" />
+          </span>
+        )}
+        {fatigue.get(c.id)?.tired && c.status === "ACTIVE" && (
+          <span
+            className="absolute bottom-2 left-2 rounded-full bg-bad px-2 py-0.5 text-[11px] text-white"
+            title="Крутиться 14+ днів, CTR за тиждень упав на 30%+ — час оновити креатив"
+          >
+            втомився
+          </span>
+        )}
+        {adStatusLabel(c.status) && (
+          <span className="absolute left-2 top-2 rounded-full bg-overlay px-2 py-0.5 text-[11px] text-white">{adStatusLabel(c.status)}</span>
+        )}
+      </a>
+      <div className="flex flex-1 flex-col p-3">
+        <div className="truncate text-[13px] font-medium" title={c.name}>
+          {c.name}
+        </div>
+        <div className="truncate text-[12px] text-faint" title={c.campaignName ?? ""}>
+          {c.campaignName}
+        </div>
+        {c.body && <p className="mt-1.5 line-clamp-1 text-[12px] text-muted" title={c.body}>{c.body}</p>}
+        {(() => {
+          const fa = fatigue.get(c.id);
+          if (!fa || fa.ctr7 === null) return null;
+          return (
+            <div className="mt-2 flex flex-wrap gap-x-3 text-[11.5px] text-faint">
+              <span>{fa.daysRunning} дн у показі</span>
+              {fa.ctrChange !== null && (
+                <span className={fa.ctrChange <= -0.3 ? "text-bad" : fa.ctrChange >= 0.1 ? "text-good" : ""}>
+                  CTR за тиждень {fa.ctrChange > 0 ? "▲" : "▼"} {fmtPct(Math.abs(fa.ctrChange), 0)}
+                </span>
+              )}
+              {fa.frequency !== null && <span title="Покази ÷ охоплення, в середньому за день за останній тиждень">частота {fa.frequency.toFixed(1)}/день</span>}
+            </div>
+          );
+        })()}
+        <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
+          <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
+          <Stat k="CTR" v={fmtPct(c.ctr, 2)} />
+          <Stat k="Ліди Meta" v={fmtInt(c.metaLeads)} />
+          <Stat k="Ліди CRM" v={fmtInt(c.crm.total)} />
+          <Stat k="Якісні" v={fmtInt(c.crm.qualified)} strong />
+          <Stat
+            k="Ціна якісного"
+            v={c.costPerQualified ? `${c.crm.qualified < MIN_SAMPLE ? "≈ " : ""}${fmtMoney(c.costPerQualified, c.currency)}` : "—"}
+            strong={c.crm.qualified >= MIN_SAMPLE}
+            title={c.crm.qualified && c.crm.qualified < MIN_SAMPLE ? `Лише ${c.crm.qualified} якісних: орієнтир, а не результат` : undefined}
+          />
+          <Stat k="Угоди" v={c.crm.won ? fmtInt(c.crm.won) : "—"} />
+          <Stat k="Виручка" v={c.revenue ? fmtMoney(c.revenue, c.currency) : "—"} />
+          <Stat k="ROMI" v={c.romi === null ? "—" : `${c.romi > 0 ? "+" : ""}${Math.round(c.romi * 100)}%`} strong />
+        </dl>
+      </div>
+    </article>  );
 }
 
 function Stat({ k, v, strong, title }: { k: string; v: string; strong?: boolean; title?: string }) {
