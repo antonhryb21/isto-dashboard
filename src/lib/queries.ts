@@ -184,6 +184,9 @@ export async function creativeTable(f: Filters) {
       impressions: sql<string>`sum(${adInsightsDaily.impressions})`,
       linkClicks: sql<string>`sum(${adInsightsDaily.linkClicks})`,
       leads: sql<string>`sum(${adInsightsDaily.leads})`,
+      reach: sql<string>`sum(${adInsightsDaily.reach})`,
+      engagement: sql<string>`sum(${adInsightsDaily.pageEngagement})`,
+      saves: sql<string>`sum(${adInsightsDaily.postSaves})`,
       currency: sql<string>`max(${adInsightsDaily.currency})`,
     })
     .from(adInsightsDaily)
@@ -193,7 +196,7 @@ export async function creativeTable(f: Filters) {
   const ids = rows.map((r) => r.adId);
   const meta = ids.length
     ? await db
-        .select({ ad: ads, campaignName: campaigns.name, region: campaigns.regionCode })
+        .select({ ad: ads, campaignName: campaigns.name, region: campaigns.regionCode, objective: campaigns.objective })
         .from(ads)
         .leftJoin(campaigns, eq(campaigns.id, ads.campaignId))
         .where(inArray(ads.id, ids))
@@ -208,8 +211,17 @@ export async function creativeTable(f: Filters) {
       const linkClicks = num(r.linkClicks);
       const metaLeads = num(r.leads);
       const c = crm.get(r.adId) ?? EMPTY_CRM;
+      const engagement = num(r.engagement);
       return {
         ...romiFor(spend, r.currency ?? "AED", c.revenueByCurrency),
+        objective: m?.objective ?? null,
+        // Same rule as the Ads page: a lead objective, or the ad actually brought leads.
+        isLead: /LEAD/i.test(m?.objective ?? "") || metaLeads > 0 || c.total > 0,
+        reach: num(r.reach),
+        engagement,
+        saves: num(r.saves),
+        cpm: impressions ? (spend / impressions) * 1000 : 0,
+        costPerEngagement: engagement ? spend / engagement : 0,
         currency: r.currency ?? "AED",
         id: r.adId,
         name: m?.ad.name ?? r.adId,

@@ -3,14 +3,14 @@ import { Play } from "lucide-react";
 import { parseFilters } from "@/lib/filters";
 import { listRegions } from "@/lib/regions";
 import { campaignOptions, creativeFatigue, creativeTable, withCurrency } from "@/lib/queries";
-import { fmtInt, fmtMoney, fmtPct } from "@/lib/format";
+import { fmtCompact, fmtInt, fmtMoney, fmtPct } from "@/lib/format";
 import { MIN_SAMPLE, adStatusLabel } from "@/lib/ad-labels";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, SectionTitle } from "@/components/kpi";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
-const SORTS = {
+const LEAD_SORTS = {
   qualified: { label: "Якісні ліди", fn: (a: Row, b: Row) => b.crm.qualified - a.crm.qualified || b.spend - a.spend },
   spend: { label: "Витрати", fn: (a: Row, b: Row) => b.spend - a.spend },
   cpq: { label: "Ціна якісного ліда", fn: (a: Row, b: Row) => (a.costPerQualified || Infinity) - (b.costPerQualified || Infinity) },
@@ -18,13 +18,26 @@ const SORTS = {
   tired: { label: "Спершу втомлені", fn: () => 0 },
   romi: { label: "ROMI", fn: (a: Row, b: Row) => (b.romi ?? -Infinity) - (a.romi ?? -Infinity) || b.revenue - a.revenue },
 };
+const PROMO_SORTS = {
+  engagement: { label: "Взаємодії", fn: (a: Row, b: Row) => b.engagement - a.engagement || b.spend - a.spend },
+  spend: { label: "Витрати", fn: (a: Row, b: Row) => b.spend - a.spend },
+  cpe: { label: "Ціна взаємодії", fn: (a: Row, b: Row) => (a.costPerEngagement || Infinity) - (b.costPerEngagement || Infinity) },
+  impressions: { label: "Покази", fn: (a: Row, b: Row) => b.impressions - a.impressions },
+  saves: { label: "Збереження", fn: (a: Row, b: Row) => b.saves - a.saves },
+  tired: { label: "Спершу втомлені", fn: () => 0 },
+};
+type Sort = { label: string; fn: (a: Row, b: Row) => number };
 type Row = Awaited<ReturnType<typeof creativeTable>>[number];
 
 export default async function CreativesPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const { f, currencies } = await withCurrency(parseFilters(sp));
-  const sortKey = (typeof sp.sort === "string" && sp.sort in SORTS ? sp.sort : "qualified") as keyof typeof SORTS;
-  const [regions, camps, rowsRaw, fatigue] = await Promise.all([listRegions(), campaignOptions(f), creativeTable(f), creativeFatigue(f.to)]);
+  const goal = sp.goal === "promo" ? "promo" : "leads";
+  const SORTS: Record<string, Sort> = goal === "promo" ? PROMO_SORTS : LEAD_SORTS;
+  const sortKey = typeof sp.sort === "string" && sp.sort in SORTS ? sp.sort : Object.keys(SORTS)[0];
+  const [regions, camps, all, fatigue] = await Promise.all([listRegions(), campaignOptions(f), creativeTable(f), creativeFatigue(f.to)]);
+  const leadCount = all.filter((c) => c.isLead).length;
+  const rowsRaw = all.filter((c) => c.isLead === (goal === "leads"));
   const rows =
     sortKey === "tired"
       ? [...rowsRaw].sort((a, b) => Number(!!fatigue.get(b.id)?.tired) - Number(!!fatigue.get(a.id)?.tired) || b.spend - a.spend)
@@ -46,6 +59,21 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
         />
       </Suspense>
       <div className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
+        Ціль:
+        {[
+          { k: "leads", label: "Лідогенерація", n: leadCount },
+          { k: "promo", label: "Просування", n: all.length - leadCount },
+        ].map((g) => {
+          const { sort: _sort, ...rest } = flat(sp);
+          void _sort;
+          return (
+            <a key={g.k} className="chip" data-active={g.k === goal} href={`?${new URLSearchParams({ ...rest, goal: g.k })}`}>
+              {g.label} <span className="text-faint">{fmtInt(g.n)}</span>
+            </a>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
         Сортувати:
         {Object.entries(SORTS).map(([k, s]) => (
           <a key={k} className="chip" data-active={k === sortKey} href={`?${new URLSearchParams({ ...flat(sp), sort: k })}`}>
@@ -55,7 +83,7 @@ export default async function CreativesPage({ searchParams }: { searchParams: SP
       </div>
 
       {rows.length === 0 ? (
-        <Empty>Оголошень з показами за цей період немає.</Empty>
+        <Empty>{goal === "promo" ? "Оголошень на просування з показами за цей період немає." : "Оголошень на лідогенерацію з показами за цей період немає."}</Empty>
       ) : (
         <div className="grid items-start gap-6 xl:grid-cols-2">
           {[
@@ -140,24 +168,36 @@ function CreativeCard({ c, fatigue }: { c: Row; fatigue: Awaited<ReturnType<type
             </div>
           );
         })()}
-        <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
-          <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
-          <Stat k="CTR" v={fmtPct(c.ctr, 2)} />
-          <Stat k="Ліди Meta" v={fmtInt(c.metaLeads)} />
-          <Stat k="Ліди CRM" v={fmtInt(c.crm.total)} />
-          <Stat k="Якісні" v={fmtInt(c.crm.qualified)} strong />
-          <Stat
-            k="Ціна якісного"
-            v={c.costPerQualified ? `${c.crm.qualified < MIN_SAMPLE ? "≈ " : ""}${fmtMoney(c.costPerQualified, c.currency)}` : "—"}
-            strong={c.crm.qualified >= MIN_SAMPLE}
-            title={c.crm.qualified && c.crm.qualified < MIN_SAMPLE ? `Лише ${c.crm.qualified} якісних: орієнтир, а не результат` : undefined}
-          />
-          <Stat k="Угоди" v={c.crm.won ? fmtInt(c.crm.won) : "—"} />
-          <Stat k="Виручка" v={c.revenue ? fmtMoney(c.revenue, c.currency) : "—"} />
-          <Stat k="ROMI" v={c.romi === null ? "—" : `${c.romi > 0 ? "+" : ""}${Math.round(c.romi * 100)}%`} strong />
-        </dl>
+        {c.isLead ? (
+          <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
+            <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
+            <Stat k="CTR" v={fmtPct(c.ctr, 2)} />
+            <Stat k="Ліди Meta" v={fmtInt(c.metaLeads)} />
+            <Stat k="Ліди CRM" v={fmtInt(c.crm.total)} />
+            <Stat k="Якісні" v={fmtInt(c.crm.qualified)} strong />
+            <Stat
+              k="Ціна якісного"
+              v={c.costPerQualified ? `${c.crm.qualified < MIN_SAMPLE ? "≈ " : ""}${fmtMoney(c.costPerQualified, c.currency)}` : "—"}
+              strong={c.crm.qualified >= MIN_SAMPLE}
+              title={c.crm.qualified && c.crm.qualified < MIN_SAMPLE ? `Лише ${c.crm.qualified} якісних: орієнтир, а не результат` : undefined}
+            />
+            <Stat k="Угоди" v={c.crm.won ? fmtInt(c.crm.won) : "—"} />
+            <Stat k="Виручка" v={c.revenue ? fmtMoney(c.revenue, c.currency) : "—"} />
+            <Stat k="ROMI" v={c.romi === null ? "—" : `${c.romi > 0 ? "+" : ""}${Math.round(c.romi * 100)}%`} strong />
+          </dl>
+        ) : (
+          <dl className="mt-auto grid grid-cols-3 gap-x-2 gap-y-1.5 pt-3 text-[11.5px]">
+            <Stat k="Витрати" v={fmtMoney(c.spend, c.currency)} />
+            <Stat k="Покази" v={fmtCompact(c.impressions)} />
+            <Stat k="CPM" v={c.cpm ? fmtMoney(c.cpm, c.currency, 1) : "—"} />
+            <Stat k="Взаємодії" v={fmtInt(c.engagement)} strong title="Взаємодії зі сторінкою й дописом за даними Meta: реакції, коментарі, збереження, перегляди профілю тощо" />
+            <Stat k="Ціна взаємодії" v={c.costPerEngagement ? fmtMoney(c.costPerEngagement, c.currency, 2) : "—"} strong />
+            <Stat k="Збереження" v={fmtInt(c.saves)} />
+          </dl>
+        )}
       </div>
-    </article>  );
+    </article>
+  );
 }
 
 function Stat({ k, v, strong, title }: { k: string; v: string; strong?: boolean; title?: string }) {
