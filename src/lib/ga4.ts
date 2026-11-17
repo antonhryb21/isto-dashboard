@@ -11,7 +11,7 @@ import { googleCredentials, googleCredentialsCheck } from "@/lib/google-credenti
 /** The company sites with a GA4 property. Property ids are not secrets; GA4_PROPERTY_ID can still override isto.ae's. */
 export const SITES = [
   { key: "ae", domain: "isto.ae", property: process.env.GA4_PROPERTY_ID?.trim() || "559806751" },
-  { key: "ua", domain: "isto.ua", property: "5606561580" },
+  { key: "ua", domain: "isto.ua", property: "389867876" },
 ] as const;
 export type Site = (typeof SITES)[number];
 export const siteByKey = (key: string | null | undefined): Site => SITES.find((s) => s.key === key) ?? SITES[0];
