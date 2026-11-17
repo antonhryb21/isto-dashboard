@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { deletedLeads, leadEvents, leadTelegramCards, leads, regions, type Lead } from "@/db/schema";
 import { CLOSED_CODES, normalizeStatus, type StatusCode } from "@/lib/statuses";
@@ -39,9 +39,14 @@ export type IncomingLead = {
  * - "import": one-off history import (CSV) — status/owner applied only to leads nobody has
  *             touched in the CRM or the bot yet, so re-importing an old file can't undo work.
  */
-export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" | "import"): Promise<"created" | "updated" | "same"> {
-  if (await wasDeleted(input.metaLeadId)) return "same";
-  const [existing] = await db.select().from(leads).where(eq(leads.metaLeadId, input.metaLeadId)).limit(1);
+export async function upsertLead(
+  input: IncomingLead,
+  author: "sheet" | "meta" | "import",
+  /** A bulk import passes what it already loaded for this key, sparing two queries per row. */
+  known?: { existing: Lead | null; deleted: boolean },
+): Promise<"created" | "updated" | "same"> {
+  if (known ? known.deleted : await wasDeleted(input.metaLeadId)) return "same";
+  const existing = known ? known.existing : (await db.select().from(leads).where(eq(leads.metaLeadId, input.metaLeadId)).limit(1))[0];
 
   if (!existing) {
     const status = normalizeStatus(input.statusRaw);
@@ -275,4 +280,21 @@ export async function deleteLead(id: string, by: string) {
     await tx.delete(leads).where(eq(leads.id, id));
     return true;
   });
+}
+
+/** Existing leads and deleted keys for many outside ids at once, for bulk imports. */
+export async function loadKnownLeads(keys: string[]) {
+  const existing = new Map<string, Lead>();
+  const deleted = new Set<string>();
+  const unique = [...new Set(keys)];
+  for (let i = 0; i < unique.length; i += 500) {
+    const chunk = unique.slice(i, i + 500);
+    const [rows, gone] = await Promise.all([
+      db.select().from(leads).where(inArray(leads.metaLeadId, chunk)),
+      db.select({ id: deletedLeads.metaLeadId }).from(deletedLeads).where(inArray(deletedLeads.metaLeadId, chunk)),
+    ]);
+    for (const r of rows) if (r.metaLeadId) existing.set(r.metaLeadId, r);
+    for (const g of gone) deleted.add(g.id);
+  }
+  return { existing, deleted };
 }

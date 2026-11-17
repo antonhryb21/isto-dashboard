@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { leadSources, leads, type Lead } from "@/db/schema";
 import { NON_LEAD_TABS } from "@/lib/config";
 import { listRegions } from "@/lib/regions";
-import { upsertLead } from "@/lib/leads";
+import { loadKnownLeads, upsertLead, type IncomingLead } from "@/lib/leads";
 import { isLeadTable, mapColumns, rowToLead, strip } from "@/lib/lead-rows";
 import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 import { appendRow, listTabs, readTab, writeCells } from "./client";
@@ -35,8 +35,7 @@ export async function importSource(source: typeof leadSources.$inferSelect) {
     return { created: 0, updated: 0, skipped: true };
   }
 
-  let created = 0;
-  let updated = 0;
+  const incomingRows: IncomingLead[] = [];
   for (let r = 1; r < rows.length; r++) {
     const incoming = rowToLead(map, rows[r], {
       regions: allRegions,
@@ -47,7 +46,23 @@ export async function importSource(source: typeof leadSources.$inferSelect) {
     if (!incoming) continue;
     incoming.sourceId = source.id;
     incoming.sheetRow = r + 1;
-    const res = await upsertLead(incoming, "sheet");
+    incomingRows.push(incoming);
+  }
+
+  // One read for the whole tab instead of two queries per row: most rows are unchanged and then cost nothing.
+  const known = await loadKnownLeads(incomingRows.map((l) => l.metaLeadId));
+  let created = 0;
+  let updated = 0;
+  const seen = new Set<string>();
+  for (const incoming of incomingRows) {
+    // A key twice in one tab: the second copy must see what the first one wrote, so it goes the slow way.
+    const res = seen.has(incoming.metaLeadId)
+      ? await upsertLead(incoming, "sheet")
+      : await upsertLead(incoming, "sheet", {
+          existing: known.existing.get(incoming.metaLeadId) ?? null,
+          deleted: known.deleted.has(incoming.metaLeadId),
+        });
+    seen.add(incoming.metaLeadId);
     if (res === "created") created++;
     if (res === "updated") updated++;
   }
