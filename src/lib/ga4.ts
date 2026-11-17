@@ -1,6 +1,6 @@
 import "server-only";
 import { JWT } from "google-auth-library";
-import { googleCredentials, googleCredentialsSet } from "@/lib/google-credentials";
+import { googleCredentials, googleCredentialsCheck } from "@/lib/google-credentials";
 
 /**
  * Google Analytics 4 for the website (isto.ae), read live through the GA4 Data API with the same
@@ -19,13 +19,9 @@ export const siteByKey = (key: string | null | undefined): Site => SITES.find((s
 let jwt: JWT | null = null;
 function auth() {
   if (jwt) return jwt;
-  const creds = googleCredentials();
-  if (!creds)
-    throw new Ga4Error(
-      googleCredentialsSet()
-        ? "ключ сервісного акаунта у Vercel не читається: вставте JSON-файл ключа повністю, як є."
-        : "у Vercel немає ключа сервісного акаунта Google (GOOGLE_SERVICE_ACCOUNT_JSON).",
-    );
+  const check = googleCredentialsCheck();
+  if (!("creds" in check)) throw new Ga4Error(check.problem);
+  const creds = check.creds;
   jwt = new JWT({ email: creds.client_email, key: creds.private_key, scopes: ["https://www.googleapis.com/auth/analytics.readonly"] });
   return jwt;
 }
