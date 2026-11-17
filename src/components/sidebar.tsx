@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Sparkles, Table2, Telescope, Users } from "lucide-react";
+import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Sparkles, Table2, Telescope, Users, Globe } from "lucide-react";
 import { IstoLogo } from "@/components/logo";
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { href: "/creatives", label: "Креативи", icon: BarChart3 },
   { href: "/social", label: "Соцмережі", icon: Images },
   { href: "/funnel", label: "Воронка", icon: Filter },
+  { href: "/site", label: "Сайт", icon: Globe },
   { href: "/crm", label: "CRM · ліди", icon: Users },
   { href: "/insights", label: "AI-інсайти", icon: Sparkles },
   { href: "/competitors", label: "Конкуренти", icon: Telescope },

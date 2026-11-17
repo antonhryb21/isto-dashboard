@@ -29,6 +29,7 @@ const ENV: { key: string; label: string; optional?: string }[] = [
   { key: "META_WEBHOOK_VERIFY_TOKEN", label: "Токен вебхука лідів" },
   { key: "LEADS_API_TOKEN", label: "Токен для Telegram-бота (n8n)" },
   { key: "GOOGLE_OAUTH_CLIENT_ID", label: "Вхід через Google" },
+  { key: "GA4_PROPERTY_ID", label: "Google Analytics 4 (сайт)", optional: "без нього розділ «Сайт» порожній" },
   { key: "ANTHROPIC_API_KEY", label: "AI-інсайти", optional: "без ключа інсайти не генеруються" },
   { key: "META_CRM_DATASET_ID", label: "Статуси лідів назад у Meta", optional: "вимкнено — Meta не знає, які ліди стали якісними" },
   { key: "TELEGRAM_BOT_TOKEN", label: "Telegram-бот для звітів", optional: "без токена звіт не надсилається" },

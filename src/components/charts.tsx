@@ -128,3 +128,29 @@ export function FollowersChart({
     </div>
   );
 }
+
+/** Website sessions as bars, users and key events as lines, one point per day. */
+export function SiteTrafficChart({ data }: { data: { date: string; sessions: number; users: number; keyEvents: number }[] }) {
+  const p = usePalette();
+  const axis = { stroke: p.faint, fontSize: 11, tickLine: false, axisLine: false } as const;
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
+          <CartesianGrid stroke={p.line} vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmtDay} {...axis} minTickGap={24} />
+          <YAxis yAxisId="traffic" {...axis} width={44} allowDecimals={false} />
+          <YAxis yAxisId="events" orientation="right" {...axis} width={32} allowDecimals={false} />
+          <Tooltip
+            contentStyle={{ background: p.panel, border: `1px solid ${p.line}`, borderRadius: 4, fontSize: 12, color: p.text }}
+            labelFormatter={(d) => fmtDay(String(d))}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar yAxisId="traffic" dataKey="sessions" name="Сеанси" fill={p.data1} fillOpacity={0.55} radius={[2, 2, 0, 0]} />
+          <Line yAxisId="traffic" dataKey="users" name="Користувачі" stroke={p.sand} strokeWidth={2} dot={false} />
+          <Line yAxisId="events" dataKey="keyEvents" name="Ключові події" stroke={p.data2} strokeWidth={2.2} dot={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
