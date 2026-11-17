@@ -30,3 +30,15 @@ export function phoneKey(phone: string | null | undefined) {
 
 /** The question a hand-typed interest is stored under, so it shows up like a form answer. */
 export const INTEREST_QUESTION = "Що цікавить";
+
+/**
+ * A lead named by the Telegram bot: the Meta leadgen id ("1977622026500180", "l:1977…"),
+ * or "w:<CRM id>" for a website form lead (its key is too long for a Telegram button).
+ */
+export function parseBotLeadId(raw: unknown): { kind: "meta"; id: string } | { kind: "crm"; id: string } | null {
+  const v = String(raw ?? "").trim();
+  const crm = /^w:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(v);
+  if (crm) return { kind: "crm", id: crm[1].toLowerCase() };
+  const meta = v.replace(/^l:/, "");
+  return /^\d{5,25}$/.test(meta) ? { kind: "meta", id: meta } : null;
+}

@@ -59,3 +59,13 @@ describe("website form lead", () => {
     expect(fieldLabel("your-message")).toBe("Message");
   });
 });
+
+describe("bot lead ids", () => {
+  it("reads Meta ids and website CRM ids", async () => {
+    const { parseBotLeadId } = await import("@/lib/lead-source");
+    expect(parseBotLeadId("l:1977622026500180")).toEqual({ kind: "meta", id: "1977622026500180" });
+    expect(parseBotLeadId("w:0F6B1C2E-3A4D-4E5F-8A9B-1C2D3E4F5A6B")).toEqual({ kind: "crm", id: "0f6b1c2e-3a4d-4e5f-8a9b-1c2d3e4f5a6b" });
+    expect(parseBotLeadId("w:123")).toBeNull();
+    expect(parseBotLeadId("")).toBeNull();
+  });
+});

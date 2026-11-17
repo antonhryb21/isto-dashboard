@@ -54,24 +54,7 @@ export async function syncTelegramCards(leadId: string, skip?: { chatId: string;
     const targets = cards.filter((c) => !(skip && skip.chatId === c.chatId && skip.messageId === c.messageId));
     if (!targets.length) return { updated: 0 };
 
-    const events = await db
-      .select()
-      .from(leadEvents)
-      .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.type, "status")))
-      .orderBy(asc(leadEvents.createdAt));
-
-    const emails = [...new Set(events.map((e) => e.author).filter((a): a is string => !!a && a.includes("@") && !a.startsWith("telegram:")))];
-    const names = new Map<string, string>();
-    if (emails.length) {
-      for (const u of await db.select({ email: users.email, name: users.name }).from(users).where(inArray(users.email, emails))) {
-        if (u.name) names.set(u.email, u.name);
-      }
-    }
-    const changes = events.map((e) => ({
-      label: STATUS_BY_CODE[e.toValue as StatusCode]?.label ?? e.toValue ?? "",
-      author: authorLabel(e.author, names),
-      at: e.createdAt,
-    }));
+    const changes = await statusChanges(leadId);
 
     let updated = 0;
     const errors: string[] = [];
@@ -98,4 +81,40 @@ export async function syncTelegramCards(leadId: string, skip?: { chatId: string;
     console.error("telegram card sync failed", leadId, e);
     return { updated: 0, errors: [e instanceof Error ? e.message : String(e)] };
   }
+}
+
+/** The lead's status changes, oldest first, with authors as the card shows them. */
+async function statusChanges(leadId: string) {
+  const events = await db
+    .select()
+    .from(leadEvents)
+    .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.type, "status")))
+    .orderBy(asc(leadEvents.createdAt));
+
+  const emails = [...new Set(events.map((e) => e.author).filter((a): a is string => !!a && a.includes("@") && !a.startsWith("telegram:")))];
+  const names = new Map<string, string>();
+  if (emails.length) {
+    for (const u of await db.select({ email: users.email, name: users.name }).from(users).where(inArray(users.email, emails))) {
+      if (u.name) names.set(u.email, u.name);
+    }
+  }
+  return events.map((e) => ({
+    label: STATUS_BY_CODE[e.toValue as StatusCode]?.label ?? e.toValue ?? "",
+    author: authorLabel(e.author, names),
+    at: e.createdAt,
+  }));
+}
+
+/**
+ * Full text for one card of a lead (its stored text plus the status blocks), for the bot to put
+ * on the card the button was pressed on. Null when that card is not known.
+ */
+export async function cardTextFor(leadId: string, metaLeadId: string, chatId: string, messageId: number) {
+  const [card] = await db
+    .select({ baseText: leadTelegramCards.baseText })
+    .from(leadTelegramCards)
+    .where(and(eq(leadTelegramCards.metaLeadId, metaLeadId), eq(leadTelegramCards.chatId, chatId), eq(leadTelegramCards.messageId, messageId)))
+    .limit(1);
+  if (!card) return null;
+  return buildCardText(card.baseText, await statusChanges(leadId));
 }

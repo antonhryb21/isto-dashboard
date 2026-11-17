@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
+import { leadById } from "@/lib/leads";
+import { parseBotLeadId } from "@/lib/lead-source";
 import { registerTelegramCard } from "@/lib/telegram-cards";
 
 /**
@@ -11,7 +13,8 @@ import { registerTelegramCard } from "@/lib/telegram-cards";
  * { "lead_id": "l:1977622026500180", "chat_id": "-5398273801", "message_id": 178,
  *   "text": "<card text as sent, HTML>", "reply_markup": { "inline_keyboard": [...] } }
  *
- * The lead does not have to be in the CRM yet. Sending the same card again changes nothing.
+ * lead_id is the Meta lead id, or "w:<CRM id>" for a website form lead.
+ * A Meta lead does not have to be in the CRM yet. Sending the same card again changes nothing.
  */
 export async function POST(request: NextRequest) {
   const token = process.env.LEADS_API_TOKEN ?? "";
@@ -27,8 +30,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "body must be JSON" }, { status: 400 });
   }
 
-  const leadId = String(body.lead_id ?? "").trim().replace(/^l:/, "");
-  if (!/^\d{5,25}$/.test(leadId)) return NextResponse.json({ ok: false, error: "lead_id must be the Meta lead id" }, { status: 400 });
+  const ref = parseBotLeadId(body.lead_id);
+  if (!ref) return NextResponse.json({ ok: false, error: "lead_id must be the Meta lead id or w:<CRM id>" }, { status: 400 });
+  let leadId = ref.id;
+  if (ref.kind === "crm") {
+    const lead = await leadById(ref.id);
+    if (!lead?.metaLeadId) return NextResponse.json({ ok: false, error: "lead not found" }, { status: 404 });
+    leadId = lead.metaLeadId;
+  }
   const chatId = String(body.chat_id ?? "").trim();
   const messageId = Number(body.message_id);
   if (!/^-?\d+$/.test(chatId) || !Number.isInteger(messageId)) {
