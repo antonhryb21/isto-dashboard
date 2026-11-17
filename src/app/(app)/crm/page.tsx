@@ -46,9 +46,9 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
     statusCounts(f, { owner, search: true }),
     responseSpeed(f),
     owners(),
-    overdueLeads(f.region),
+    overdueLeads(f.region, f.platform),
     ownerSpeed(f),
-    dueFollowUps(f.region),
+    dueFollowUps(f.region, f.platform),
     lostReasons(f),
   ]);
   const pages = Math.max(1, Math.ceil(all.length / PER_PAGE));
@@ -86,7 +86,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
         }
       />
       <Suspense>
-        <FilterBar regions={regions.map((r) => ({ value: r.code, label: r.name }))} showSearch searchPlaceholder="Ім'я, телефон, email, місто" />
+        <FilterBar regions={regions.map((r) => ({ value: r.code, label: r.name }))} showWebsite showSearch searchPlaceholder="Ім'я, телефон, email, місто" />
       </Suspense>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

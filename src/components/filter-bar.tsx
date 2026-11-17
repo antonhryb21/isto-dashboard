@@ -11,6 +11,7 @@ export function FilterBar({
   regions,
   campaigns,
   showPlatform = true,
+  showWebsite = false,
   showType = false,
   showCampaign = false,
   showSearch = false,
@@ -23,6 +24,8 @@ export function FilterBar({
   regions: Option[];
   campaigns?: Option[];
   showPlatform?: boolean;
+  /** Adds "Сайт" to the platform choice: only leads come from the website, ads and posts do not. */
+  showWebsite?: boolean;
   showType?: boolean;
   showCampaign?: boolean;
   showSearch?: boolean;
@@ -104,6 +107,7 @@ export function FilterBar({
           <option value="">Усі платформи</option>
           <option value="ig">Instagram</option>
           <option value="fb">Facebook</option>
+          {showWebsite && <option value="website">Сайт</option>}
         </select>
       )}
       {showType && (

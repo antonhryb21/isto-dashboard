@@ -265,6 +265,21 @@ export async function campaignOptions(f?: Filters) {
 
 // ---------- Leads / CRM ----------
 
+/**
+ * The platform filter for leads. Meta writes "ig" / "fb", leads imported from the old Google Sheet
+ * may say "instagram" / "facebook", and website forms write "website", so each choice covers its spellings.
+ */
+const PLATFORM_ALIASES: Record<string, string[]> = {
+  ig: ["ig", "instagram"],
+  fb: ["fb", "facebook", "messenger"],
+  website: ["website", "site", "web", "сайт"],
+};
+export function leadPlatformWhere(platform: string | null): SQL[] {
+  if (!platform) return [];
+  const names = PLATFORM_ALIASES[platform] ?? [platform];
+  return [inArray(sql`lower(${leads.platform})`, names)];
+}
+
 export function leadWhere(f: Filters, from: string, to: string): SQL[] {
   const w: SQL[] = [
     gte(leads.createdTime, new Date(from + "T00:00:00Z")),
@@ -272,7 +287,7 @@ export function leadWhere(f: Filters, from: string, to: string): SQL[] {
   ];
   if (f.region) w.push(eq(leads.regionCode, f.region));
   else if (f.currencyRegions) w.push(f.currencyRegions.length ? inArray(leads.regionCode, f.currencyRegions) : sql`false`);
-  if (f.platform) w.push(eq(leads.platform, f.platform));
+  w.push(...leadPlatformWhere(f.platform));
   if (f.campaign) w.push(eq(leads.campaignId, f.campaign));
   return w;
 }
@@ -336,7 +351,7 @@ export async function leadList(
   f: Filters,
   opts: { status?: string | null; owner?: string | null; overdue?: boolean; due?: boolean; limit?: number } = {},
 ) {
-  const region = f.region ? [eq(leads.regionCode, f.region)] : [];
+  const region = [...(f.region ? [eq(leads.regionCode, f.region)] : []), ...leadPlatformWhere(f.platform)];
   const w = opts.overdue ? [...overdueWhere(), ...region] : opts.due ? [...dueWhere(), ...region] : leadWhere(f, f.from, f.to);
   if (opts.status) w.push(eq(leads.status, opts.status));
   if (opts.owner === "-") w.push(sql`(${leads.owner} is null or ${leads.owner} = '')`);
@@ -392,9 +407,10 @@ export function dueWhere(): SQL[] {
   return [isNotNull(leads.nextContactAt), lte(leads.nextContactAt, localDate()), notInArray(leads.status, CLOSED_CODES)];
 }
 
-export async function dueFollowUps(region?: string | null) {
+export async function dueFollowUps(region?: string | null, platform?: string | null) {
   const w = dueWhere();
   if (region) w.push(eq(leads.regionCode, region));
+  w.push(...leadPlatformWhere(platform ?? null));
   return db
     .select({ id: leads.id, fullName: leads.fullName, owner: leads.owner, nextContactAt: leads.nextContactAt, regionCode: leads.regionCode })
     .from(leads)
@@ -554,9 +570,10 @@ export function overdueWhere(): SQL[] {
   return [eq(leads.status, "new"), lte(leads.createdTime, slaCutoff()), gte(leads.createdTime, new Date(Date.now() - SLA_LOOKBACK_DAYS * 86_400_000))];
 }
 
-export async function overdueLeads(region?: string | null) {
+export async function overdueLeads(region?: string | null, platform?: string | null) {
   const w = overdueWhere();
   if (region) w.push(eq(leads.regionCode, region));
+  w.push(...leadPlatformWhere(platform ?? null));
   return db
     .select({ id: leads.id, fullName: leads.fullName, phone: leads.phone, createdTime: leads.createdTime, regionCode: leads.regionCode, owner: leads.owner })
     .from(leads)
