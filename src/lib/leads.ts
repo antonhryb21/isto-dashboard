@@ -243,3 +243,8 @@ export async function leadByMetaId(metaLeadId: string) {
   const [l] = await db.select().from(leads).where(and(eq(leads.metaLeadId, metaLeadId))).limit(1);
   return l ?? null;
 }
+
+export async function leadById(id: string) {
+  const [l] = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
+  return l ?? null;
+}

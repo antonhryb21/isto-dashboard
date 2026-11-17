@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
  * POST /api/leads/website
  * Authorization: Bearer <LEADS_API_TOKEN>
  * Body: see `src/lib/website-lead.ts`.
- * Answer: { ok, id, created, url }. The same submission_id sent twice gives created: false.
+ * Answer: { ok, id, created, url, card_id }. The same submission_id sent twice gives created: false.
+ * card_id ("w:<id>") is what the bot puts in its status buttons and sends to /api/leads/status.
  */
 export async function POST(request: NextRequest) {
   const token = process.env.LEADS_API_TOKEN ?? "";
@@ -32,5 +33,5 @@ export async function POST(request: NextRequest) {
   if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
 
   const { id, created } = await saveWebsiteLead(parsed.lead);
-  return NextResponse.json({ ok: true, id, created, url: `${process.env.APP_URL ?? ""}/crm/${id}` });
+  return NextResponse.json({ ok: true, id, created, url: `${process.env.APP_URL ?? ""}/crm/${id}`, card_id: `w:${id}` });
 }
