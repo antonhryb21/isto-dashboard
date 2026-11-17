@@ -138,7 +138,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           value={fmtInt(crm.total)}
           current={crm.total}
           previous={crmPrev.total}
-          hint={`${fmtInt(crmLeads)} без спаму${crm.manual ? ` · ${fmtInt(crm.manual)} вручну` : ""}`}
+          hint={`${fmtInt(crmLeads)} без спаму${crm.website ? ` · ${fmtInt(crm.website)} з сайту` : ""}${crm.manual ? ` · ${fmtInt(crm.manual)} вручну` : ""}`}
         />
         <Kpi
           label="Ціна ліда"
@@ -151,7 +151,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
             [
               crm.adLeads ? `без спаму: ${fmtMoney(cplReal, cur)}` : null,
               ad.metaLeads ? `за Meta: ${fmtMoney(ad.cpl, cur)}` : null,
-              crm.manual ? "без доданих вручну" : null,
+              crm.manual || crm.website ? "без сайту і доданих вручну" : null,
             ]
               .filter(Boolean)
               .join(" · ") || undefined
