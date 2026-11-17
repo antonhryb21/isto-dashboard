@@ -25,7 +25,7 @@ export async function discoverSources(spreadsheetId: string, regionCode: string 
   }
 }
 
-export async function importSource(source: typeof leadSources.$inferSelect) {
+export async function importSource(source: typeof leadSources.$inferSelect, deadline = Infinity) {
   const allRegions = await listRegions();
   const rows = await readTab(source.spreadsheetId, source.sheetName);
   if (rows.length < 2) return { created: 0, updated: 0, skipped: true };
@@ -54,7 +54,13 @@ export async function importSource(source: typeof leadSources.$inferSelect) {
   let created = 0;
   let updated = 0;
   const seen = new Set<string>();
+  let partial = false;
   for (const incoming of incomingRows) {
+    // Out of time: stop cleanly; what is saved stays, the rest comes with the next sync.
+    if (Date.now() > deadline) {
+      partial = true;
+      break;
+    }
     // A key twice in one tab: the second copy must see what the first one wrote, so it goes the slow way.
     const res = seen.has(incoming.metaLeadId)
       ? await upsertLead(incoming, "sheet")
@@ -66,16 +72,24 @@ export async function importSource(source: typeof leadSources.$inferSelect) {
     if (res === "created") created++;
     if (res === "updated") updated++;
   }
+  if (partial) return { created, updated, skipped: false, partial: "не вистачило часу — решта рядків наступним оновленням" };
   await db.update(leadSources).set({ lastSyncedAt: new Date(), lastError: null }).where(eq(leadSources.id, source.id));
   return { created, updated, skipped: false };
 }
 
-export async function importAllSources() {
-  const sources = await db.select().from(leadSources).where(eq(leadSources.enabled, true));
+export async function importAllSources(deadline = Infinity) {
+  // Least recently synced first, so a run that stops early still moves every tab forward over time.
+  const sources = (await db.select().from(leadSources).where(eq(leadSources.enabled, true))).sort(
+    (a, b) => (a.lastSyncedAt?.getTime() ?? 0) - (b.lastSyncedAt?.getTime() ?? 0),
+  );
   const result: Record<string, unknown> = {};
   for (const s of sources) {
+    if (Date.now() > deadline) {
+      result[`${s.sheetName}`] = { skipped: "не вистачило часу — наступним оновленням" };
+      continue;
+    }
     try {
-      result[`${s.sheetName}`] = await importSource(s);
+      result[`${s.sheetName}`] = await importSource(s, deadline);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await db.update(leadSources).set({ lastError: msg.slice(0, 500) }).where(eq(leadSources.id, s.id));

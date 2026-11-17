@@ -82,8 +82,9 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     // New leads first: until the Page is subscribed to the leadgen webhook this is how they arrive.
     await step("metaLeads", () => syncMetaLeads(1));
     await step("insights", () => syncInsights(day(2), day(0)));
-    if (sheetsEnabled()) await step("sheets", () => importAllSources());
     await step("instagram", () => syncInstagram(7));
+    // Last: a big first import of the lead sheets must not starve the steps above.
+    if (sheetsEnabled()) await step("sheets", () => importAllSources(started + BUDGET_MS - 15_000));
   }
   if (kind === "daily") {
     // Most important first: if time runs out, the tail waits for the next run.
@@ -93,7 +94,7 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(30));
     await step("facebook", () => syncFacebook(30));
     await step("competitors", () => syncCompetitors(2));
-    if (sheetsEnabled()) await step("sheets", () => importAllSources());
+    if (sheetsEnabled()) await step("sheets", () => importAllSources(started + BUDGET_MS - 15_000));
   }
   if (kind === "backfill") {
     const months = Math.min(opts.months ?? 12, 36);
@@ -125,7 +126,7 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(120));
     await step("facebook", () => syncFacebook(120, 1000));
     await step("competitors", () => syncCompetitors(10));
-    if (sheetsEnabled()) await step("sheets", () => importAllSources());
+    if (sheetsEnabled()) await step("sheets", () => importAllSources(started + BUDGET_MS - 15_000));
   }
 
   const failed = Object.values(report).some((v) => typeof v === "object" && v !== null && "error" in v);
