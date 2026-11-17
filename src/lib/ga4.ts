@@ -7,7 +7,13 @@ import { JWT } from "google-auth-library";
  * on the GA4 property, and the "Google Analytics Data API" must be enabled in its Cloud project.
  */
 
-export const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID?.trim() || null;
+/** The company sites with a GA4 property. Property ids are not secrets; GA4_PROPERTY_ID can still override isto.ae's. */
+export const SITES = [
+  { key: "ae", domain: "isto.ae", property: process.env.GA4_PROPERTY_ID?.trim() || "559806751" },
+  { key: "ua", domain: "isto.ua", property: "5606561580" },
+] as const;
+export type Site = (typeof SITES)[number];
+export const siteByKey = (key: string | null | undefined): Site => SITES.find((s) => s.key === key) ?? SITES[0];
 
 let jwt: JWT | null = null;
 function auth() {
@@ -38,17 +44,16 @@ type Report = { rows?: Row[] };
 const cache = new Map<string, { at: number; value: Report }>();
 const TTL_MS = 10 * 60_000;
 
-async function runReport(body: Record<string, unknown>): Promise<Report> {
-  if (!GA4_PROPERTY_ID) throw new Ga4Error("Не задано GA4_PROPERTY_ID у Vercel.");
-  const key = JSON.stringify(body);
+async function runReport(property: string, body: Record<string, unknown>): Promise<Report> {
+  const key = property + JSON.stringify(body);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const { token } = await auth().getAccessToken();
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`, {
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`, {
     method: "POST",
     cache: "no-store",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: key,
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -68,16 +73,16 @@ const dim = (r: Row, i: number) => r.dimensionValues?.[i]?.value ?? "";
 const TOTALS = ["sessions", "totalUsers", "newUsers", "engagedSessions", "averageSessionDuration", "keyEvents", "screenPageViews"] as const;
 export type SiteTotals = Record<(typeof TOTALS)[number], number> & { engagementRate: number };
 
-async function totals(from: string, to: string): Promise<SiteTotals> {
-  const r = await runReport({ dateRanges: [{ startDate: from, endDate: to }], metrics: TOTALS.map((name) => ({ name })) });
+async function totals(property: string, from: string, to: string): Promise<SiteTotals> {
+  const r = await runReport(property, { dateRanges: [{ startDate: from, endDate: to }], metrics: TOTALS.map((name) => ({ name })) });
   const row = r.rows?.[0];
   const out = Object.fromEntries(TOTALS.map((k, i) => [k, row ? num(row, i) : 0])) as Record<(typeof TOTALS)[number], number>;
   return { ...out, engagementRate: out.sessions ? out.engagedSessions / out.sessions : 0 };
 }
 
 /** One table: a dimension with sessions, engaged sessions and key events, largest first. */
-async function breakdown(dimension: string, from: string, to: string, limit: number) {
-  const r = await runReport({
+async function breakdown(property: string, dimension: string, from: string, to: string, limit: number) {
+  const r = await runReport(property, {
     dateRanges: [{ startDate: from, endDate: to }],
     dimensions: [{ name: dimension }],
     metrics: [{ name: "sessions" }, { name: "engagedSessions" }, { name: "keyEvents" }, { name: "totalUsers" }],
@@ -98,8 +103,8 @@ async function breakdown(dimension: string, from: string, to: string, limit: num
 
 export type SiteBreakdownRow = Awaited<ReturnType<typeof breakdown>>[number];
 
-async function daily(from: string, to: string) {
-  const r = await runReport({
+async function daily(property: string, from: string, to: string) {
+  const r = await runReport(property, {
     dateRanges: [{ startDate: from, endDate: to }],
     dimensions: [{ name: "date" }],
     metrics: [{ name: "sessions" }, { name: "totalUsers" }, { name: "keyEvents" }],
@@ -113,8 +118,8 @@ async function daily(from: string, to: string) {
 }
 
 /** Which events GA4 counts as key events (form sends, calls, WhatsApp clicks) and how often each fired. */
-async function keyEventsByName(from: string, to: string) {
-  const r = await runReport({
+async function keyEventsByName(property: string, from: string, to: string) {
+  const r = await runReport(property, {
     dateRanges: [{ startDate: from, endDate: to }],
     dimensions: [{ name: "eventName" }],
     metrics: [{ name: "keyEvents" }],
@@ -125,17 +130,17 @@ async function keyEventsByName(from: string, to: string) {
 }
 
 /** Everything the "Сайт" page shows, for the period and the one before it. */
-export async function siteReport(from: string, to: string, prevFrom: string, prevTo: string) {
+export async function siteReport(property: string, from: string, to: string, prevFrom: string, prevTo: string) {
   const [now, prev, days, channels, sources, landing, countries, devices, keyEvents] = await Promise.all([
-    totals(from, to),
-    totals(prevFrom, prevTo),
-    daily(from, to),
-    breakdown("sessionDefaultChannelGroup", from, to, 12),
-    breakdown("sessionSourceMedium", from, to, 12),
-    breakdown("landingPage", from, to, 15),
-    breakdown("country", from, to, 10),
-    breakdown("deviceCategory", from, to, 5),
-    keyEventsByName(from, to),
+    totals(property, from, to),
+    totals(property, prevFrom, prevTo),
+    daily(property, from, to),
+    breakdown(property, "sessionDefaultChannelGroup", from, to, 12),
+    breakdown(property, "sessionSourceMedium", from, to, 12),
+    breakdown(property, "landingPage", from, to, 15),
+    breakdown(property, "country", from, to, 10),
+    breakdown(property, "deviceCategory", from, to, 5),
+    keyEventsByName(property, from, to),
   ]);
   return { now, prev, days, channels, sources, landing, countries, devices, keyEvents };
 }

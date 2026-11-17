@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { parseFilters } from "@/lib/filters";
-import { crmTotals } from "@/lib/queries";
-import { GA4_PROPERTY_ID, Ga4Error, serviceAccountEmail, siteReport, type SiteBreakdownRow } from "@/lib/ga4";
+import { websiteLeadCount } from "@/lib/queries";
+import Link from "next/link";
+import { Ga4Error, SITES, serviceAccountEmail, siteByKey, siteReport, type Site, type SiteBreakdownRow } from "@/lib/ga4";
 import { fmtInt, fmtPct, fmtRange } from "@/lib/format";
 import { FilterBar } from "@/components/filter-bar";
 import { Empty, Kpi, SectionTitle } from "@/components/kpi";
@@ -10,49 +11,44 @@ import { SiteTrafficChart } from "@/components/charts";
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function SitePage({ searchParams }: { searchParams: SP }) {
-  const f = parseFilters(await searchParams);
+  const sp = await searchParams;
+  const f = parseFilters(sp);
+  const site = siteByKey(typeof sp.site === "string" ? sp.site : null);
   const title = (
     <SectionTitle
-      title="Сайт · isto.ae"
+      title={`Сайт · ${site.domain}`}
       sub={`Google Analytics 4: звідки приходять відвідувачі, що вони дивляться і скільки з них залишають заявку. ${fmtRange(f.from, f.to)}.`}
     />
   );
   const filters = (
-    <Suspense>
-      <FilterBar regions={[]} showRegion={false} showPlatform={false} />
-    </Suspense>
+    <div className="flex flex-col gap-3">
+      <SitePicker sp={sp} current={site} />
+      <Suspense>
+        <FilterBar regions={[]} showRegion={false} showPlatform={false} />
+      </Suspense>
+    </div>
   );
-
-  if (!GA4_PROPERTY_ID) {
-    return (
-      <div className="flex flex-col gap-6">
-        {title}
-        <Setup reason="У Vercel ще немає змінної GA4_PROPERTY_ID." />
-      </div>
-    );
-  }
 
   let data: Awaited<ReturnType<typeof siteReport>>;
   try {
-    data = await siteReport(f.from, f.to, f.prevFrom, f.prevTo);
+    data = await siteReport(site.property, f.from, f.to, f.prevFrom, f.prevTo);
   } catch (e) {
     if (!(e instanceof Ga4Error)) throw e;
     return (
       <div className="flex flex-col gap-6">
         {title}
-        <Setup reason={e.message} />
+        <SitePicker sp={sp} current={site} />
+        <Setup reason={e.message} site={site} />
       </div>
     );
   }
 
   // Website leads in the CRM for the same days, to compare with the form sends GA4 saw.
-  const [crm, crmPrev] = await Promise.all([
-    crmTotals({ ...f, region: null, platform: "website", campaign: null }),
-    crmTotals({ ...f, region: null, platform: "website", campaign: null }, f.prevFrom, f.prevTo),
-  ]);
+  const [crmNow, crmPrev] = await Promise.all([websiteLeadCount(site.domain, f.from, f.to), websiteLeadCount(site.domain, f.prevFrom, f.prevTo)]);
+  const crm = { total: crmNow };
   const { now, prev } = data;
-  const conv = now.sessions ? crm.total / now.sessions : 0;
-  const convPrev = prev.sessions ? crmPrev.total / prev.sessions : 0;
+  const conv = now.sessions ? crmNow / now.sessions : 0;
+  const convPrev = prev.sessions ? crmPrev / prev.sessions : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,7 +69,7 @@ export default async function SitePage({ searchParams }: { searchParams: SP }) {
           label="Ліди з сайту в CRM"
           value={fmtInt(crm.total)}
           current={crm.total}
-          previous={crmPrev.total}
+          previous={crmPrev}
           hint={`${fmtInt(now.keyEvents)} ключових подій у GA4 · конверсія ${fmtPct(conv, 2)}`}
         />
       </div>
@@ -158,20 +154,31 @@ function Table({ title, rows, wide, compact }: { title: string; rows: SiteBreakd
   );
 }
 
-function Setup({ reason }: { reason: string }) {
+function SitePicker({ sp, current }: { sp: Record<string, string | string[] | undefined>; current: Site }) {
+  const keep = Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" && k !== "site" ? [[k, v]] : []));
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
+      Сайт:
+      {SITES.map((s) => (
+        <Link key={s.key} className="chip" data-active={s.key === current.key} href={`?${new URLSearchParams([...keep, ["site", s.key]])}`}>
+          {s.domain}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function Setup({ reason, site }: { reason: string; site: Site }) {
   const email = serviceAccountEmail();
   return (
     <div className="card flex flex-col gap-3 p-5 text-[13.5px] leading-relaxed">
       <div className="font-medium text-warn">GA4 ще не підключено: {reason}</div>
       <ol className="list-decimal pl-5 text-muted">
         <li>
-          У Vercel додайте змінну <code>GA4_PROPERTY_ID</code> — ID ресурсу GA4 (для isto.ae це <code>559806751</code>) і зробіть Redeploy.
-        </li>
-        <li>
-          У GA4 → Адміністрування → Керування доступом до ресурсу додайте{" "}
+          У GA4 ресурсу {site.domain} (ID <code>{site.property}</code>) → Адміністрування → Керування доступом до ресурсу додайте{" "}
           {email ? <code>{email}</code> : "email сервісного акаунта (client_email з JSON-ключа)"} з роллю «Читач».
         </li>
-        <li>У Google Cloud того ж сервісного акаунта увімкніть «Google Analytics Data API».</li>
+        <li>У Google Cloud того ж сервісного акаунта увімкніть «Google Analytics Data API» (один раз для всіх сайтів).</li>
       </ol>
     </div>
   );

@@ -648,3 +648,19 @@ export async function creativeFatigue(to: string) {
     }),
   );
 }
+
+/** Website form leads of one site (isto.ae, isto.ua) created in the period; the site is part of their key. */
+export async function websiteLeadCount(domain: string, from: string, to: string) {
+  const [r] = await db
+    .select({ n: sql<string>`count(*)` })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.source, "website"),
+        sql`${leads.metaLeadId} like ${`web:%${domain}:%`}`,
+        gte(leads.createdTime, new Date(from + "T00:00:00Z")),
+        lte(leads.createdTime, new Date(to + "T23:59:59Z")),
+      ),
+    );
+  return Number(r?.n ?? 0);
+}
