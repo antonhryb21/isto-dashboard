@@ -1,14 +1,14 @@
 import "server-only";
 import { JWT } from "google-auth-library";
+import { googleCredentials } from "@/lib/google-credentials";
 
 const API = "https://sheets.googleapis.com/v4/spreadsheets";
 
 let jwt: JWT | null = null;
 function auth() {
   if (jwt) return jwt;
-  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
-  if (!b64) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 is not set");
-  const creds = JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as { client_email: string; private_key: string };
+  const creds = googleCredentials();
+  if (!creds) throw new Error("Google service account key is not set (GOOGLE_SERVICE_ACCOUNT_JSON)");
   jwt = new JWT({
     email: creds.client_email,
     key: creds.private_key,

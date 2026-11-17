@@ -29,6 +29,7 @@ const ENV: { key: string; label: string; optional?: string }[] = [
   { key: "META_WEBHOOK_VERIFY_TOKEN", label: "Токен вебхука лідів" },
   { key: "LEADS_API_TOKEN", label: "Токен для Telegram-бота (n8n)" },
   { key: "GOOGLE_OAUTH_CLIENT_ID", label: "Вхід через Google" },
+  { key: "GOOGLE_SERVICE_ACCOUNT_JSON", label: "Ключ сервісного акаунта Google (GA4, таблиці)", optional: "без нього немає розділу «Сайт» і синхронізації з Google-таблицями" },
   { key: "GA4_PROPERTY_ID", label: "GA4 ресурс isto.ae (заміна)", optional: "не потрібен: ID isto.ae і isto.ua вже в коді" },
   { key: "ANTHROPIC_API_KEY", label: "AI-інсайти", optional: "без ключа інсайти не генеруються" },
   { key: "META_CRM_DATASET_ID", label: "Статуси лідів назад у Meta", optional: "вимкнено — Meta не знає, які ліди стали якісними" },

@@ -1,5 +1,6 @@
 import "server-only";
 import { JWT } from "google-auth-library";
+import { googleCredentials, googleCredentialsSet } from "@/lib/google-credentials";
 
 /**
  * Google Analytics 4 for the website (isto.ae), read live through the GA4 Data API with the same
@@ -18,21 +19,20 @@ export const siteByKey = (key: string | null | undefined): Site => SITES.find((s
 let jwt: JWT | null = null;
 function auth() {
   if (jwt) return jwt;
-  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
-  if (!b64) throw new Ga4Error("Не задано GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 у Vercel.");
-  const creds = JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as { client_email: string; private_key: string };
+  const creds = googleCredentials();
+  if (!creds)
+    throw new Ga4Error(
+      googleCredentialsSet()
+        ? "ключ сервісного акаунта у Vercel не читається: вставте JSON-файл ключа повністю, як є."
+        : "у Vercel немає ключа сервісного акаунта Google (GOOGLE_SERVICE_ACCOUNT_JSON).",
+    );
   jwt = new JWT({ email: creds.client_email, key: creds.private_key, scopes: ["https://www.googleapis.com/auth/analytics.readonly"] });
   return jwt;
 }
 
 /** The service account's email, to tell the person whom to add in GA4. */
 export function serviceAccountEmail(): string | null {
-  try {
-    const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
-    return b64 ? (JSON.parse(Buffer.from(b64, "base64").toString("utf8")).client_email as string) : null;
-  } catch {
-    return null;
-  }
+  return googleCredentials()?.client_email ?? null;
 }
 
 export class Ga4Error extends Error {}

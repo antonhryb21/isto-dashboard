@@ -8,6 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
+import { googleCredentialsSet } from "@/lib/google-credentials";
 import { addComment, createLead, deleteLead, findDuplicate, setLeadFields } from "@/lib/leads";
 import { syncTelegramCards } from "@/lib/telegram-cards";
 import { LEAD_PLATFORMS } from "@/lib/lead-source";
@@ -102,7 +103,7 @@ export async function updateLeadAction(_: ActionResult | null, form: FormData): 
   let message: string | undefined;
   const statusChanged = events.some((e) => e.type === "status");
   const ownerChanged = events.some((e) => e.type === "owner");
-  if ((statusChanged || ownerChanged) && before.sourceId && process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64) {
+  if ((statusChanged || ownerChanged) && before.sourceId && googleCredentialsSet()) {
     try {
       const res = await writeBackLead(
         before,

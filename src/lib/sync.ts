@@ -9,9 +9,10 @@ import { syncAdStructure, syncInsights } from "@/lib/meta/ads";
 import { syncFacebook, syncInstagram } from "@/lib/meta/social";
 import { discoverSources, importAllSources } from "@/lib/sheets/sync";
 import { syncMetaLeads } from "@/lib/meta/leadgen";
+import { googleCredentialsSet } from "@/lib/google-credentials";
 
 /** Live Google Sheets sync is optional: on only when a service account is configured. */
-export const sheetsEnabled = () => !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
+export const sheetsEnabled = googleCredentialsSet;
 
 export type SyncKind = "quick" | "daily" | "backfill";
 
