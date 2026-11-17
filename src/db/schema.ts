@@ -366,3 +366,15 @@ export const leadTelegramCards = pgTable(
   },
   (t) => [primaryKey({ columns: [t.chatId, t.messageId] }), index("lead_tg_cards_lead_idx").on(t.metaLeadId)],
 );
+
+/**
+ * Leads an admin deleted from the CRM. Keyed by the lead's outside id (Meta lead id, sheet key,
+ * website submission key), so the Meta sync, the sheet sync and the website webhook do not
+ * bring a deleted lead back.
+ */
+export const deletedLeads = pgTable("deleted_leads", {
+  metaLeadId: text("meta_lead_id").primaryKey(),
+  fullName: text("full_name"),
+  deletedBy: text("deleted_by").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+});

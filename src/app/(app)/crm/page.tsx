@@ -85,6 +85,7 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
           </div>
         }
       />
+      {sp.deleted === "1" && <div className="card border-good/50 p-3 text-[13px] text-good">Лід видалено.</div>}
       <Suspense>
         <FilterBar regions={regions.map((r) => ({ value: r.code, label: r.name }))} showWebsite showSearch searchPlaceholder="Ім'я, телефон, email, місто" />
       </Suspense>

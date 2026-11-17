@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { competitors, leadSources, regions, targets, users, type Role } from "@/db/schema";
 import { requireUser } from "@/lib/auth/current-user";
-import { addComment, createLead, findDuplicate, setLeadFields } from "@/lib/leads";
+import { addComment, createLead, deleteLead, findDuplicate, setLeadFields } from "@/lib/leads";
 import { syncTelegramCards } from "@/lib/telegram-cards";
 import { LEAD_PLATFORMS } from "@/lib/lead-source";
 import { subscribePageToLeadgen } from "@/lib/meta/leadgen";
@@ -419,4 +419,14 @@ export async function generateInsightsAction(): Promise<ActionResult> {
     revalidatePath("/insights");
     return { ok: false, message: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Delete a lead from the CRM. Admins only; the lead is not brought back by later syncs. */
+export async function deleteLeadAction(id: string): Promise<ActionResult> {
+  const user = await requireUser("admin");
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { ok: false, message: "Невірний лід" };
+  const done = await deleteLead(id, user.email);
+  if (!done) return { ok: false, message: "Лід уже видалено" };
+  revalidatePath("/crm");
+  redirect("/crm?deleted=1");
 }

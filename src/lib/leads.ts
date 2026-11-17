@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { leadEvents, leads, regions, type Lead } from "@/db/schema";
+import { deletedLeads, leadEvents, leadTelegramCards, leads, regions, type Lead } from "@/db/schema";
 import { CLOSED_CODES, normalizeStatus, type StatusCode } from "@/lib/statuses";
 import { INTEREST_QUESTION, phoneKey } from "@/lib/lead-source";
 
@@ -40,6 +40,7 @@ export type IncomingLead = {
  *             touched in the CRM or the bot yet, so re-importing an old file can't undo work.
  */
 export async function upsertLead(input: IncomingLead, author: "sheet" | "meta" | "import"): Promise<"created" | "updated" | "same"> {
+  if (await wasDeleted(input.metaLeadId)) return "same";
   const [existing] = await db.select().from(leads).where(eq(leads.metaLeadId, input.metaLeadId)).limit(1);
 
   if (!existing) {
@@ -247,4 +248,31 @@ export async function leadByMetaId(metaLeadId: string) {
 export async function leadById(id: string) {
   const [l] = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
   return l ?? null;
+}
+
+/** True when an admin deleted the lead with this outside id, so no sync should bring it back. */
+export async function wasDeleted(metaLeadId: string | null | undefined) {
+  if (!metaLeadId) return false;
+  const [row] = await db.select({ id: deletedLeads.metaLeadId }).from(deletedLeads).where(eq(deletedLeads.metaLeadId, metaLeadId)).limit(1);
+  return !!row;
+}
+
+/**
+ * Delete a lead for good: its history goes with it (cascade) and its Telegram cards stop being updated.
+ * The outside id is remembered so the Meta, sheet and website syncs skip it from now on.
+ */
+export async function deleteLead(id: string, by: string) {
+  return db.transaction(async (tx) => {
+    const [lead] = await tx.select({ metaLeadId: leads.metaLeadId, fullName: leads.fullName }).from(leads).where(eq(leads.id, id)).limit(1);
+    if (!lead) return false;
+    if (lead.metaLeadId) {
+      await tx
+        .insert(deletedLeads)
+        .values({ metaLeadId: lead.metaLeadId, fullName: lead.fullName, deletedBy: by })
+        .onConflictDoNothing();
+      await tx.delete(leadTelegramCards).where(eq(leadTelegramCards.metaLeadId, lead.metaLeadId));
+    }
+    await tx.delete(leads).where(eq(leads.id, id));
+    return true;
+  });
 }

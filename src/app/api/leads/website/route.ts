@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
   const parsed = parseWebsiteLead(body);
   if (!parsed.ok) return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
 
-  const { id, created } = await saveWebsiteLead(parsed.lead);
+  const { id, created, deleted } = await saveWebsiteLead(parsed.lead);
+  if (deleted) return NextResponse.json({ ok: true, id: null, created: false, deleted: true });
   return NextResponse.json({ ok: true, id, created, url: `${process.env.APP_URL ?? ""}/crm/${id}`, card_id: `w:${id}` });
 }

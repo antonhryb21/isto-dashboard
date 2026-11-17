@@ -3,14 +3,17 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { leadEvents, leads, regions } from "@/db/schema";
 import { websiteLeadKey, type WebsiteLeadInput } from "@/lib/website-lead";
+import { wasDeleted } from "@/lib/leads";
 
 /**
  * Save a website form lead. Marked `source: "website"`, `platform: "website"`, organic,
  * so it shows as "Сайт" and is not counted as a result of ad spend.
  * Sending the same submission again changes nothing.
  */
-export async function saveWebsiteLead(input: WebsiteLeadInput): Promise<{ id: string; created: boolean }> {
+export async function saveWebsiteLead(input: WebsiteLeadInput): Promise<{ id: string | null; created: boolean; deleted?: true }> {
   const key = websiteLeadKey(input);
+  // An admin deleted this submission from the CRM: a resend does not bring it back.
+  if (await wasDeleted(key)) return { id: null, created: false, deleted: true };
   const [existing] = await db.select({ id: leads.id }).from(leads).where(eq(leads.metaLeadId, key)).limit(1);
   if (existing) return { id: existing.id, created: false };
 

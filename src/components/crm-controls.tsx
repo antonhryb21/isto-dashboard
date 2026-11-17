@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { addCommentAction, quickOwnerAction, quickStatusAction, updateLeadAction, type ActionResult } from "@/app/actions";
+import { addCommentAction, deleteLeadAction, quickOwnerAction, quickStatusAction, updateLeadAction, type ActionResult } from "@/app/actions";
 import { LOST_REASONS, NEEDS_REASON, STATUSES, STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 
 export function StatusBadge({ status }: { status: string }) {
@@ -188,5 +188,44 @@ export function CommentForm({ id }: { id: string }) {
         {state && !state.ok && <span className="text-[12px] text-bad">{state.message}</span>}
       </div>
     </form>
+  );
+}
+
+/** Admin-only delete on the lead card, with a second click to confirm. */
+export function DeleteLeadButton({ id, name }: { id: string; name: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  if (!confirming)
+    return (
+      <button type="button" className="btn text-bad" onClick={() => setConfirming(true)}>
+        Видалити
+      </button>
+    );
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-2 text-[12.5px]">
+        <span className="text-muted">Видалити «{name}» назавжди?</span>
+        <button
+          type="button"
+          className="btn text-white"
+          style={{ background: "var(--bad)", borderColor: "var(--bad)" }}
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await deleteLeadAction(id);
+              if (r && !r.ok) setError(r.message ?? "Не вдалося видалити");
+            })
+          }
+        >
+          {pending ? "Видаляю…" : "Так, видалити"}
+        </button>
+        <button type="button" className="btn" disabled={pending} onClick={() => setConfirming(false)}>
+          Скасувати
+        </button>
+      </div>
+      <span className="text-[11.5px] text-faint">Історія й коментарі зникнуть, синхронізація з Meta чи таблицею його не поверне.</span>
+      {error && <span className="text-[12px] text-bad">{error}</span>}
+    </div>
   );
 }

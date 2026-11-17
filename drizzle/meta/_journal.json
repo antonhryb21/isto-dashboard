@@ -64,6 +64,13 @@
       "when": 1794414038387,
       "tag": "0008_telegram_cards",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794915650640,
+      "tag": "0009_deleted_leads",
+      "breakpoints": true
     }
   ]
 }

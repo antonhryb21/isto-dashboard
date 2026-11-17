@@ -9,7 +9,7 @@ import { leadDetail, owners } from "@/lib/queries";
 import { listRegions } from "@/lib/regions";
 import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
 import { fmtDate, fmtMoney } from "@/lib/format";
-import { CommentForm, LeadForm, StatusBadge } from "@/components/crm-controls";
+import { CommentForm, DeleteLeadButton, LeadForm, StatusBadge } from "@/components/crm-controls";
 
 const label = (code: string | null) => (code ? STATUS_BY_CODE[code as StatusCode]?.label ?? code : "—");
 
@@ -21,6 +21,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   if (!data) notFound();
   const { lead, events, ad } = data;
   const canEdit = hasRole(user.role, "marketing");
+  const canDelete = user.role === "admin";
   const region = regions.find((r) => r.code === lead.regionCode);
   const c = leadContact(lead);
   // Hints are for leads still being worked; once someone marked it as junk there is nothing to suggest.
@@ -45,6 +46,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             {lead.dealAmount && <span className="text-accent">{fmtMoney(Number(lead.dealAmount), lead.dealCurrency ?? "AED")}</span>}
           </div>
         </div>
+        {canDelete && <DeleteLeadButton id={lead.id} name={c.name || "Без імені"} />}
       </div>
 
       {flags.length > 0 && (
