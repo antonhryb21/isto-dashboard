@@ -288,10 +288,11 @@ export async function crmTotals(f: Filters, from = f.from, to = f.to) {
       revenue: sql<string>`coalesce(sum(${leads.dealAmount}) filter (where ${leads.status} = 'won'),0)`,
       fresh: sql<string>`count(*) filter (where ${leads.status} = 'new')`,
       manual: sql<string>`count(*) filter (where ${leads.source} = 'manual')`,
-      // Hand-typed leads (a call, a referral) are not a result of ad spend: cost per lead is counted without them.
-      adAll: sql<string>`count(*) filter (where ${leads.source} <> 'manual')`,
-      adLeads: sql<string>`count(*) filter (where ${leads.source} <> 'manual' and not (${inArray(leads.status, JUNK)}))`,
-      adQualified: sql<string>`count(*) filter (where ${leads.source} <> 'manual' and ${inArray(leads.status, QUALIFIED)})`,
+      website: sql<string>`count(*) filter (where ${leads.source} = 'website')`,
+      // Hand-typed leads (a call, a referral) and website forms are not a result of ad spend: cost per lead is counted without them.
+      adAll: sql<string>`count(*) filter (where ${leads.source} not in ('manual', 'website'))`,
+      adLeads: sql<string>`count(*) filter (where ${leads.source} not in ('manual', 'website') and not (${inArray(leads.status, JUNK)}))`,
+      adQualified: sql<string>`count(*) filter (where ${leads.source} not in ('manual', 'website') and ${inArray(leads.status, QUALIFIED)})`,
     })
     .from(leads)
     .where(and(...leadWhere(f, from, to)));
@@ -310,6 +311,7 @@ export async function crmTotals(f: Filters, from = f.from, to = f.to) {
     revenue: num(r?.revenue),
     fresh: num(r?.fresh),
     manual: num(r?.manual),
+    website: num(r?.website),
     adAll: num(r?.adAll),
     adLeads: num(r?.adLeads),
     adQualified: num(r?.adQualified),

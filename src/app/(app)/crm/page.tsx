@@ -199,7 +199,13 @@ export default async function CrmPage({ searchParams }: { searchParams: SP }) {
                     {Object.values(leadContact(l).interest).slice(0, 2).join(" · ") || "—"}
                   </td>
                   <td className="max-w-40 truncate text-[12px] text-faint" title={l.campaignName ?? ""}>
-                    {l.source === "manual" ? `вручну · ${platformLabel(l.platform) ?? "інше"}` : l.isOrganic ? "органіка" : l.campaignName ?? "—"}
+                    {l.source === "manual"
+                      ? `вручну · ${platformLabel(l.platform) ?? "інше"}`
+                      : l.source === "website"
+                        ? `сайт · ${l.formName ?? "форма"}`
+                        : l.isOrganic
+                          ? "органіка"
+                          : l.campaignName ?? "—"}
                   </td>
                   <td>
                     <OwnerSelect id={l.id} owner={l.owner} owners={ownerList} disabled={!canEdit} />
