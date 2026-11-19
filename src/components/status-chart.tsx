@@ -2,6 +2,11 @@ import Link from "next/link";
 import { STATUSES, type StatusCode } from "@/lib/statuses";
 import { fmtInt, fmtPct, plural } from "@/lib/format";
 
+/** Leads that were never clients; the chart shows them as one red row, with each status a link beside it. */
+const MERGED: StatusCode[] = ["spam", "supplier", "job_inquiry"];
+const MERGED_LABEL = "Спам і нецільові";
+const MERGED_COLOR = "#e11d48";
+
 const GROUPS: { title: string; stages: string[] }[] = [
   { title: "У роботі", stages: ["open"] },
   { title: "Результат", stages: ["won", "lost"] },
@@ -22,7 +27,8 @@ export function StatusChart({
   href: (status: StatusCode | null) => string;
 }) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const max = Math.max(1, ...STATUSES.map((s) => counts[s.code] ?? 0));
+  const merged = MERGED.reduce((a, c) => a + (counts[c] ?? 0), 0);
+  const max = Math.max(1, merged, ...STATUSES.filter((s) => !MERGED.includes(s.code)).map((s) => counts[s.code] ?? 0));
   const share = (n: number) => (total ? n / total : 0);
 
   return (
@@ -47,7 +53,7 @@ export function StatusChart({
       ) : (
         <>
           <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-panel-2" role="img" aria-label="Частка лідів у кожному статусі">
-            {STATUSES.filter((s) => counts[s.code]).map((s) => (
+            {STATUSES.filter((s) => counts[s.code] && !MERGED.includes(s.code)).map((s) => (
               <Link
                 key={s.code}
                 href={href(s.code)}
@@ -56,12 +62,25 @@ export function StatusChart({
                 style={{ width: `${share(counts[s.code]) * 100}%`, background: s.color, opacity: active && active !== s.code ? 0.35 : 1 }}
               />
             ))}
+            {merged > 0 && (
+              <Link
+                href={href("spam")}
+                title={`${MERGED_LABEL}: ${fmtInt(merged)} (${fmtPct(share(merged), 0)})`}
+                className="h-full transition-opacity hover:opacity-80"
+                style={{
+                  width: `${share(merged) * 100}%`,
+                  background: MERGED_COLOR,
+                  opacity: active && !MERGED.includes(active as StatusCode) ? 0.35 : 1,
+                }}
+              />
+            )}
           </div>
 
           <div className="mt-5 grid gap-x-8 gap-y-5 md:grid-cols-3">
             {GROUPS.map((g) => {
-              const items = STATUSES.filter((s) => g.stages.includes(s.stage));
-              const sum = items.reduce((a, s) => a + (counts[s.code] ?? 0), 0);
+              const items = STATUSES.filter((s) => g.stages.includes(s.stage) && !MERGED.includes(s.code));
+              const hasMerged = g.stages.includes("junk");
+              const sum = items.reduce((a, s) => a + (counts[s.code] ?? 0), 0) + (hasMerged ? merged : 0);
               return (
                 <div key={g.title}>
                   <div className="mb-2 flex items-baseline justify-between text-[12px]">
@@ -97,6 +116,44 @@ export function StatusChart({
                         </li>
                       );
                     })}
+                    {hasMerged && (
+                      <li>
+                        <div
+                          className={`grid grid-cols-[minmax(0,8.5rem)_1fr_auto] items-center gap-3 rounded px-1.5 py-1 text-[12.5px] ${
+                            active && MERGED.includes(active as StatusCode) ? "bg-panel-2" : ""
+                          } ${merged ? "" : "text-faint"}`}
+                        >
+                          <span className="flex items-center gap-1.5 truncate">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: MERGED_COLOR, opacity: merged ? 1 : 0.4 }} />
+                            {MERGED_LABEL}
+                          </span>
+                          <span className="h-1.5 rounded-full bg-panel-2">
+                            <span
+                              className="block h-1.5 rounded-full"
+                              style={{ width: `${merged ? Math.max(3, (merged / max) * 100) : 0}%`, background: MERGED_COLOR }}
+                            />
+                          </span>
+                          <span className="w-16 text-right tabular-nums">
+                            {fmtInt(merged)}
+                            <span className="ml-1 text-[11px] text-faint">{merged ? fmtPct(share(merged), 0) : ""}</span>
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 pl-5 text-[11.5px] text-faint">
+                          {MERGED.map((code) => {
+                            const st = STATUSES.find((x) => x.code === code)!;
+                            return (
+                              <Link
+                                key={code}
+                                href={href(active === code ? null : code)}
+                                className={`hover:text-text ${active === code ? "text-text" : ""}`}
+                              >
+                                {st.label} {fmtInt(counts[code] ?? 0)}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </li>
+                    )}
                   </ul>
                 </div>
               );
