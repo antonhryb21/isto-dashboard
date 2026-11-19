@@ -7,10 +7,12 @@ const MERGED: StatusCode[] = ["spam", "supplier", "job_inquiry"];
 const MERGED_LABEL = "Спам і нецільові";
 const MERGED_COLOR = "#e11d48";
 
-const GROUPS: { title: string; stages: string[] }[] = [
-  { title: "У роботі", stages: ["open"] },
-  { title: "Результат", stages: ["won", "lost"] },
-  { title: "Не клієнти", stages: ["junk"] },
+const byStage = (stage: string) => STATUSES.filter((x) => x.stage === stage).map((x) => x.code);
+const GROUPS: { title: string; codes: StatusCode[]; merged?: boolean }[] = [
+  // Not relevant sits under the working statuses: a real enquiry that did not fit, not junk.
+  { title: "Статуси лідів", codes: [...byStage("open"), "not_relevant"] },
+  { title: "Результат", codes: [...byStage("won"), ...byStage("lost")] },
+  { title: "Не клієнти", codes: byStage("junk").filter((c) => c !== "not_relevant" && !MERGED.includes(c)), merged: true },
 ];
 
 /**
@@ -78,8 +80,8 @@ export function StatusChart({
 
           <div className="mt-5 grid gap-x-8 gap-y-5 md:grid-cols-3">
             {GROUPS.map((g) => {
-              const items = STATUSES.filter((s) => g.stages.includes(s.stage) && !MERGED.includes(s.code));
-              const hasMerged = g.stages.includes("junk");
+              const items = g.codes.map((c) => STATUSES.find((x) => x.code === c)!);
+              const hasMerged = !!g.merged;
               const sum = items.reduce((a, s) => a + (counts[s.code] ?? 0), 0) + (hasMerged ? merged : 0);
               return (
                 <div key={g.title}>
