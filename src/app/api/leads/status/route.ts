@@ -17,7 +17,7 @@ import { cardTextFor, registerTelegramCard, syncTelegramCards } from "@/lib/tele
  *
  * lead_id is the Meta leadgen id (with or without the "l:" prefix), or "w:<CRM id>" for a website
  * form lead. status accepts a label
- * ("Follow-up"), a code ("follow_up") or a known alias. owner and comment are optional.
+ * ("No answer"), a code ("no_answer") or a known alias. owner and comment are optional.
  *
  * Optional, the card the button was pressed on: "chat_id", "message_id", "card_text", "reply_markup".
  * The bot edits that card itself; the dashboard remembers it and rewrites the lead's other cards

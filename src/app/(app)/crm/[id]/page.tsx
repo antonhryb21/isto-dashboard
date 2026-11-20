@@ -7,11 +7,11 @@ import { ArrowLeft } from "lucide-react";
 import { hasRole, requireUser } from "@/lib/auth/current-user";
 import { leadDetail, owners } from "@/lib/queries";
 import { listRegions } from "@/lib/regions";
-import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
+import { STATUS_BY_CODE, statusLabel, type StatusCode } from "@/lib/statuses";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { CommentForm, DeleteLeadButton, LeadForm, StatusBadge } from "@/components/crm-controls";
 
-const label = (code: string | null) => (code ? STATUS_BY_CODE[code as StatusCode]?.label ?? code : "—");
+const label = (code: string | null) => statusLabel(code);
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

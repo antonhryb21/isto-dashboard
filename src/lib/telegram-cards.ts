@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leadEvents, leadTelegramCards, leads, users } from "@/db/schema";
-import { STATUS_BY_CODE, type StatusCode } from "@/lib/statuses";
+import { statusLabel } from "@/lib/statuses";
 import { authorLabel, buildCardText, stripStatusBlocks } from "@/lib/telegram-cards-format";
 
 /** Token of the bot that posts the lead cards (the n8n bot). Only that bot can edit its messages. */
@@ -99,7 +99,7 @@ async function statusChanges(leadId: string) {
     }
   }
   return events.map((e) => ({
-    label: STATUS_BY_CODE[e.toValue as StatusCode]?.label ?? e.toValue ?? "",
+    label: e.toValue ? statusLabel(e.toValue) : "",
     author: authorLabel(e.author, names),
     at: e.createdAt,
   }));

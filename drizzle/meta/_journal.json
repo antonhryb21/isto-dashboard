@@ -71,6 +71,13 @@
       "when": 1794915650640,
       "tag": "0009_deleted_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795300000000,
+      "tag": "0010_retire_follow_up",
+      "breakpoints": true
     }
   ]
 }

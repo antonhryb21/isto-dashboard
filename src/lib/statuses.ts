@@ -3,7 +3,6 @@ export const STATUSES = [
   { code: "new", label: "New", stage: "open", color: "#3b82f6" },
   { code: "contacted", label: "Contacted", stage: "open", color: "#06b6d4" },
   { code: "qualified", label: "Lead (Qualified)", stage: "open", color: "#10b981" },
-  { code: "follow_up", label: "Follow-up", stage: "open", color: "#8b5cf6" },
   { code: "no_answer", label: "No answer", stage: "open", color: "#94a3b8" },
   { code: "meeting", label: "Meeting", stage: "open", color: "#f59e0b" },
   { code: "proposal", label: "Proposal sent", stage: "open", color: "#f97316" },
@@ -26,7 +25,7 @@ export const STATUS_BY_CODE = Object.fromEntries(STATUSES.map((s) => [s.code, s]
 export const FUNNEL_ORDER: StatusCode[] = ["new", "contacted", "meeting", "proposal", "won"];
 
 /** Statuses that count as a qualified (real) lead. */
-export const QUALIFIED: StatusCode[] = ["contacted", "qualified", "follow_up", "meeting", "proposal", "won", "lost"];
+export const QUALIFIED: StatusCode[] = ["contacted", "qualified", "meeting", "proposal", "won", "lost"];
 
 /** Not a client at all (spam, a supplier, a job seeker…): left out of "real leads". Derived, so a new junk status is never missed. */
 export const JUNK_CODES = STATUSES.filter((s) => s.stage === "junk").map((s) => s.code) as StatusCode[];
@@ -46,9 +45,11 @@ const ALIASES: Record<string, StatusCode> = {
   qualified: "qualified",
   "якісний": "qualified",
   "кваліфікований": "qualified",
-  "follow-up": "follow_up",
-  "follow up": "follow_up",
-  followup: "follow_up",
+  // Follow-up was retired: the next-contact date covers it, so the old label lands on Contacted.
+  "follow-up": "contacted",
+  "follow up": "contacted",
+  followup: "contacted",
+  follow_up: "contacted",
   "no answer": "no_answer",
   "не відповідає": "no_answer",
   meeting: "meeting",
@@ -85,7 +86,6 @@ export function funnelDepth(code: StatusCode): number {
       return 0;
     case "contacted":
     case "qualified":
-    case "follow_up":
     case "lost":
       return 1;
     case "meeting":
@@ -100,8 +100,8 @@ export function funnelDepth(code: StatusCode): number {
 }
 
 /**
- * Strict version for external callers (the Telegram bot): accepts a code ("follow_up"),
- * a label ("Follow-up") or a known alias; returns null instead of guessing.
+ * Strict version for external callers (the Telegram bot): accepts a code ("no_answer"),
+ * a label ("No answer") or a known alias; returns null instead of guessing.
  */
 export function parseStatus(raw: string | null | undefined): StatusCode | null {
   const key = (raw ?? "").trim().toLowerCase();
@@ -110,6 +110,14 @@ export function parseStatus(raw: string | null | undefined): StatusCode | null {
   const byLabel = STATUSES.find((s) => s.label.toLowerCase() === key);
   if (byLabel) return byLabel.code;
   return ALIASES[key] ?? null;
+}
+
+/** Labels of retired statuses, so old history entries still read as words. */
+const RETIRED_LABELS: Record<string, string> = { follow_up: "Follow-up" };
+
+export function statusLabel(code: string | null | undefined): string {
+  if (!code) return "—";
+  return STATUS_BY_CODE[code as StatusCode]?.label ?? RETIRED_LABELS[code] ?? code;
 }
 
 /** Reasons offered when a lead is closed without a deal; stored as the text itself. */

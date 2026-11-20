@@ -64,7 +64,7 @@ describe("lead hints", () => {
 
 describe("statuses", () => {
   it("normalises sheet values and is strict for the bot", () => {
-    expect(normalizeStatus("Follow-up")).toBe("follow_up");
+    expect(normalizeStatus("Follow-up")).toBe("contacted");
     expect(normalizeStatus("something else")).toBe("new");
     expect(parseStatus("Proposal sent")).toBe("proposal");
     expect(parseStatus("something else")).toBeNull();
@@ -110,7 +110,7 @@ describe("percent display", () => {
 
 describe("statuses from the Telegram bot", () => {
   it("accepts every button label as it is written in the bot", () => {
-    for (const label of ["Contacted", "Lead (Qualified)", "No answer", "Follow-up", "Job inquiry", "Not relevant", "Spam", "Supplier"]) {
+    for (const label of ["Contacted", "Lead (Qualified)", "No answer", "Job inquiry", "Not relevant", "Spam", "Supplier"]) {
       expect(parseStatus(label), label).not.toBeNull();
     }
     expect(parseStatus("Lead (Qualified)")).toBe("qualified");
