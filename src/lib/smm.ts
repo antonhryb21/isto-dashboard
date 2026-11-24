@@ -217,7 +217,7 @@ export async function refreshSmmMonth(month: string) {
   const paid = await paidInstagramImpressions(from, lastDay);
   const direct = await directForMonth(monthStart(month), monthStart(nextMonth(month)));
   if (direct) notes.directFromContent = "З контенту — розмови, що почалися з відповіді на сторіс або поширеного допису";
-  else notes.directNew = "Директ ще не читається: потрібен дозвіл instagram_manage_messages і доступ до повідомлень в Instagram";
+  else notes.directNew = "Розмови з директу ще не завантажені. Натисніть «Оновити з Meta»: поруч з кнопкою буде видно, скільки прочитано або що завадило";
   const viewsTotal = v.views ?? null;
   const viewsPaid = paid !== null && viewsTotal !== null ? Math.min(paid, viewsTotal) : null;
   if (viewsPaid !== null) notes.viewsPaid = "Реклама — покази в Instagram з рекламних кабінетів; органіка — решта переглядів";
