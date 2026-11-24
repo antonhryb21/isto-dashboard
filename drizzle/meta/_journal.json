@@ -78,6 +78,20 @@
       "when": 1795300000000,
       "tag": "0010_retire_follow_up",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795533485104,
+      "tag": "0011_smm_report",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795533522162,
+      "tag": "0012_ig_stories",
+      "breakpoints": true
     }
   ]
 }

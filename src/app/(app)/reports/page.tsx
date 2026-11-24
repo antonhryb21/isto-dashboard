@@ -8,6 +8,7 @@ import { GRAINS, MAX_COLUMNS, buckets, crmSince, firstDataYear, reportCurrencies
 import { fmtInt, fmtMoney, fmtPct, fmtRange } from "@/lib/format";
 import { SectionTitle } from "@/components/kpi";
 import { CsvButton } from "@/components/csv-button";
+import { ReportSwitcher } from "@/components/smm-controls";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 
@@ -92,9 +93,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: SP }
   return (
     <div className="flex flex-col gap-6">
       <SectionTitle
-        title="Звіти"
+        title="Звіт по рекламі"
         sub="Реклама Meta, взаємодія з дописами та нові підписники за днями, тижнями, місяцями або роками."
-        right={<CsvButton rows={csv} filename={`isto-report-${grain}-${cols[0]?.from ?? today}.csv`} />}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportSwitcher />
+            <CsvButton rows={csv} filename={`isto-report-${grain}-${cols[0]?.from ?? today}.csv`} />
+          </div>
+        }
       />
 
       <Suspense>

@@ -378,3 +378,25 @@ export const deletedLeads = pgTable("deleted_leads", {
   deletedBy: text("deleted_by").notNull(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The monthly SMM report for Instagram, one row per month ("2026-10").
+ * `data` is what was loaded (the team's report for the history, Meta for later months);
+ * `overrides` holds what someone typed in by hand and always wins over `data`;
+ * `notes` explains, per field, where a number was corrected and why.
+ */
+export const smmMonths = pgTable("smm_months", {
+  month: text("month").primaryKey(),
+  source: text("source").notNull().default("meta"), // report | meta
+  data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+  overrides: jsonb("overrides").$type<Record<string, unknown>>().notNull().default({}),
+  notes: jsonb("notes").$type<Record<string, string>>().notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Instagram stories as they are seen (the API lists a story only for its 24 hours), so the SMM report can count them. */
+export const igStories = pgTable("ig_stories", {
+  id: text("id").primaryKey(),
+  mediaType: text("media_type"),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+});

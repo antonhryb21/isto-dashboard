@@ -431,3 +431,39 @@ export async function deleteLeadAction(id: string): Promise<ActionResult> {
   revalidatePath("/crm");
   redirect("/crm?deleted=1");
 }
+
+// ---------- SMM report ----------
+
+/** Numbers typed in on the SMM report (direct messages, profile visits…) for one month. */
+export async function saveSmmAction(_: ActionResult | null, form: FormData): Promise<ActionResult> {
+  await requireUser("marketing");
+  const { MANUAL_FIELDS } = await import("@/lib/smm-calc");
+  const { saveSmmManual } = await import("@/lib/smm");
+  const month = String(form.get("month") ?? "");
+  const values: Record<string, number | null> = {};
+  for (const f of MANUAL_FIELDS) {
+    const raw = String(form.get(f.key) ?? "").replace(/\s/g, "").replace(",", ".");
+    if (raw !== "" && !Number.isFinite(Number(raw))) return { ok: false, message: `«${f.label}»: потрібне число` };
+    values[f.key] = raw === "" ? null : Number(raw);
+  }
+  try {
+    await saveSmmManual(month, values);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Не вдалося зберегти" };
+  }
+  revalidatePath("/reports/smm");
+  return { ok: true, message: "Збережено" };
+}
+
+/** Re-read the running month (and the previous one in its first week) from Meta. */
+export async function refreshSmmAction(): Promise<ActionResult> {
+  await requireUser("marketing");
+  const { refreshSmm } = await import("@/lib/smm");
+  try {
+    await refreshSmm();
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Не вдалося оновити" };
+  }
+  revalidatePath("/reports/smm");
+  return { ok: true, message: "Оновлено з Meta" };
+}

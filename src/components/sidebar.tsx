@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { BarChart3, Filter, Images, LayoutGrid, Megaphone, Settings, Sparkles, Table2, Telescope, Users, Globe } from "lucide-react";
+import { BarChart3, ChevronDown, Filter, Images, LayoutGrid, Megaphone, Settings, Sparkles, Table2, Telescope, Users, Globe } from "lucide-react";
 import { IstoLogo } from "@/components/logo";
 
 const NAV = [
@@ -16,6 +17,12 @@ const NAV = [
   { href: "/insights", label: "AI-інсайти", icon: Sparkles },
   { href: "/competitors", label: "Конкуренти", icon: Telescope },
   { href: "/reports", label: "Звіти", icon: Table2 },
+];
+
+/** Reports open as a sub-menu under "Звіти". */
+const REPORT_ITEMS = [
+  { href: "/reports", label: "Звіт по рекламі" },
+  { href: "/reports/smm", label: "SMM-звіт" },
 ];
 
 /** Keeps the period/region filters when moving between sections. */
@@ -41,6 +48,7 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
       <nav className="mt-7 flex flex-col gap-0.5">
         {items.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? path === "/" : path.startsWith(href);
+          if (href === "/reports") return <ReportsMenu key={href} active={active} path={path} suffix={suffix} />;
           return (
             <Link
               key={href}
@@ -67,7 +75,8 @@ export function Sidebar({ isAdmin, email }: { isAdmin: boolean; email: string })
 
 export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const path = usePathname();
-  const items = isAdmin ? [...NAV, { href: "/admin", label: "Адмін", icon: Settings }] : NAV;
+  const base = NAV.flatMap((n) => (n.href === "/reports" ? REPORT_ITEMS.map((r) => ({ ...n, ...r })) : [n]));
+  const items = isAdmin ? [...base, { href: "/admin", label: "Адмін", icon: Settings }] : base;
   return (
     <nav className="md:hidden flex gap-1 overflow-x-auto border-b border-line px-3 py-2">
       {items.map(({ href, label }) => (
@@ -75,7 +84,7 @@ export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
           key={href}
           href={href}
           className="chip whitespace-nowrap"
-          data-active={href === "/" ? path === "/" : path.startsWith(href)}
+          data-active={href === "/" || href === "/reports" ? path === href : path.startsWith(href)}
         >
           {label}
         </Link>
@@ -84,5 +93,43 @@ export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
         <button className="chip whitespace-nowrap text-muted">Вийти</button>
       </form>
     </nav>
+  );
+}
+
+function ReportsMenu({ active, path, suffix }: { active: boolean; path: string; suffix: string }) {
+  const [open, setOpen] = useState(active);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
+          active ? "text-text" : "text-muted hover:text-text"
+        }`}
+      >
+        <Table2 size={15} strokeWidth={1.7} />
+        Звіти
+        <ChevronDown size={14} className={`ml-auto transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="ml-[22px] mt-0.5 flex flex-col gap-0.5 border-l border-line pl-2">
+          {REPORT_ITEMS.map((r) => {
+            const on = path === r.href;
+            return (
+              <Link
+                key={r.href}
+                href={r.href + (r.href === "/reports" ? suffix : "")}
+                className={`rounded-lg px-3 py-1.5 text-[13px] transition-colors ${
+                  on ? "bg-panel text-text shadow-[inset_2px_0_0_var(--accent)]" : "text-muted hover:text-text"
+                }`}
+              >
+                {r.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { localDate } from "@/lib/dates";
 import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { upsertMany } from "@/db/upsert";
-import { accountSnapshots, ads, socialPosts, socialPostSnapshots } from "@/db/schema";
+import { accountSnapshots, ads, igStories, socialPosts, socialPostSnapshots } from "@/db/schema";
 import { META } from "@/lib/config";
 import { graph, graphAll, graphAsPage, graphAllAsPage, MetaError } from "./client";
 
@@ -123,6 +123,7 @@ export async function syncInstagram(insightDays = 30) {
     });
 
   await syncIgNewFollowers(ig);
+  await syncIgStories(ig);
 
   const media = await graphAll<IgMedia>(`${ig}/media`, {
     fields: "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
@@ -311,5 +312,20 @@ async function syncIgNewFollowers(ig: string) {
         target: [accountSnapshots.platform, accountSnapshots.accountId, accountSnapshots.date],
         set: { newFollowers: v.value },
       });
+  }
+}
+
+/** Stories live 24 hours in the API, so each sync records the ones it sees; the SMM report counts them per month. */
+async function syncIgStories(ig: string) {
+  try {
+    const stories = await graphAll<{ id: string; media_type?: string; timestamp: string }>(`${ig}/stories`, { fields: "id,media_type,timestamp", limit: 100 });
+    for (const st of stories) {
+      await db
+        .insert(igStories)
+        .values({ id: st.id, mediaType: st.media_type ?? null, publishedAt: new Date(st.timestamp) })
+        .onConflictDoNothing();
+    }
+  } catch (e) {
+    console.warn("[instagram] stories unavailable:", e instanceof Error ? e.message : e);
   }
 }

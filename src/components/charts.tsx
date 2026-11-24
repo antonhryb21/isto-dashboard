@@ -154,3 +154,80 @@ export function SiteTrafficChart({ data }: { data: { date: string; sessions: num
     </div>
   );
 }
+
+type SmmSeries = { key: string; name: string; color?: "data1" | "data2" | "good" | "sand" | "accent" | "bad"; stack?: string; right?: boolean };
+
+/**
+ * The SMM report's monthly charts: bars (optionally stacked) on the left axis, lines on the right one.
+ * `unit` formats values in the tooltip and on the axes ("pct" for shares given as fractions).
+ */
+export function MonthlyChart({
+  data,
+  bars = [],
+  lines = [],
+  unit,
+  rightUnit,
+  height = 260,
+}: {
+  data: Record<string, number | string | null>[];
+  bars?: SmmSeries[];
+  lines?: SmmSeries[];
+  unit?: "pct" | "aed";
+  rightUnit?: "pct" | "aed";
+  height?: number;
+}) {
+  const p = usePalette();
+  const color = (c: SmmSeries["color"], i: number) =>
+    ({ data1: p.data1, data2: p.data2, good: p.good, sand: p.sand, accent: p.accent, bad: "#e11d48" })[c ?? (i % 2 ? "data2" : "data1")];
+  const axis = { stroke: p.faint, fontSize: 11, tickLine: false, axisLine: false } as const;
+  const fmt = (u: "pct" | "aed" | undefined, v: number, short = false) => {
+    if (u === "pct") return `${(v * 100).toFixed(short ? 1 : 2).replace(".", ",")}%`;
+    const s =
+      short && Math.abs(v) >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : short && Math.abs(v) >= 1e4 ? `${Math.round(v / 1e3)}k` : new Intl.NumberFormat("uk-UA").format(Math.round(v));
+    return u === "aed" && !short ? `${s} AED` : s;
+  };
+  const rightKeys = new Set([...bars, ...lines].filter((s) => s.right).map((s) => s.key));
+  const hasRight = rightKeys.size > 0;
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={p.line} vertical={false} />
+          <XAxis dataKey="label" {...axis} minTickGap={8} />
+          <YAxis yAxisId="l" {...axis} width={52} tickFormatter={(v) => fmt(unit, Number(v), true)} />
+          {hasRight && <YAxis yAxisId="r" orientation="right" {...axis} width={52} tickFormatter={(v) => fmt(rightUnit, Number(v), true)} />}
+          <Tooltip
+            contentStyle={{ background: p.panel, border: `1px solid ${p.line}`, borderRadius: 4, fontSize: 12, color: p.text }}
+            formatter={(v, name, item) => [v === null || v === undefined ? "—" : fmt(rightKeys.has(String(item.dataKey)) ? rightUnit : unit, Number(v)), name]}
+          />
+          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: p.text, paddingTop: 6 }} />
+          {bars.map((s, i) => (
+            <Bar
+              key={s.key}
+              yAxisId={s.right ? "r" : "l"}
+              dataKey={s.key}
+              name={s.name}
+              stackId={s.stack}
+              fill={color(s.color, i)}
+              fillOpacity={0.75}
+              radius={s.stack ? 0 : [2, 2, 0, 0]}
+            />
+          ))}
+          {lines.map((s, i) => (
+            <Line
+              key={s.key}
+              yAxisId={s.right ? "r" : "l"}
+              dataKey={s.key}
+              name={s.name}
+              stroke={color(s.color, i + 1)}
+              strokeWidth={2.2}
+              dot={{ r: 2.5 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          ))}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
