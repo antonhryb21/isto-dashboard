@@ -97,10 +97,16 @@ export async function graphAsPage<T = unknown>(path: string, params: Record<stri
   url.searchParams.set("access_token", pt);
   const proof = appSecretProof(pt);
   if (proof) url.searchParams.set("appsecret_proof", proof);
-  const res = await fetch(url, { cache: "no-store" });
-  const body = (await res.json()) as T & { error?: { message: string; code?: number } };
-  if (body.error) throw new MetaError(body.error.message, body.error.code);
-  return body;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { cache: "no-store" });
+    const body = (await res.json()) as T & { error?: { message: string; code?: number } };
+    if (!body.error) return body;
+    if (body.error.code !== undefined && RETRYABLE.has(body.error.code) && attempt < 2) {
+      await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
+      continue;
+    }
+    throw new MetaError(body.error.message, body.error.code);
+  }
 }
 
 export async function graphAllAsPage<T>(path: string, params: Record<string, string | number | undefined> = {}, max = 2000): Promise<T[]> {

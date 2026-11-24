@@ -462,8 +462,10 @@ export async function refreshSmmAction(): Promise<ActionResult> {
   const { syncIgConversations } = await import("@/lib/meta/direct");
   // Direct first, so the month picks up new contacts; a missing permission must not stop the rest.
   let directProblem = "";
+  let directNote = "";
   try {
-    await syncIgConversations(40);
+    const r = await syncIgConversations(40);
+    directNote = r.left ? ` Директ: прочитано ${r.added} нових розмов, ще ${r.left} — натисніть ще раз.` : ` Директ: ${r.conversations} розмов за 40 днів.`;
   } catch (e) {
     directProblem = ` Директ не прочитано: ${e instanceof Error ? e.message : String(e)}`;
   }
@@ -473,5 +475,5 @@ export async function refreshSmmAction(): Promise<ActionResult> {
     return { ok: false, message: e instanceof Error ? e.message : "Не вдалося оновити" };
   }
   revalidatePath("/reports/smm");
-  return { ok: !directProblem, message: `Оновлено з Meta.${directProblem}` };
+  return { ok: !directProblem, message: `Оновлено з Meta.${directProblem || directNote}` };
 }
