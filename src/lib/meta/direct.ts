@@ -14,6 +14,26 @@ async function follow<T>(next: string): Promise<Paged<T>> {
   return body;
 }
 
+/** Meta times out or refuses big conversation pages; ask again with a smaller page. */
+const TOO_BIG = /timeout|reduce the amount|temporarily unavailable|unknown error/i;
+
+async function conversationsPage(next: string | null) {
+  type C = Paged<{ id: string; updated_time: string }>;
+  let lastError: unknown;
+  for (const limit of [25, 10, 5]) {
+    try {
+      if (!next) return await graphAsPage<C>(`${META.pageId}/conversations`, { platform: "instagram", fields: "id,updated_time", limit });
+      const url = new URL(next);
+      url.searchParams.set("limit", String(limit));
+      return await follow<C["data"][number]>(url.toString());
+    } catch (e) {
+      lastError = e;
+      if (!(e instanceof Error && TOO_BIG.test(e.message))) throw e;
+    }
+  }
+  throw lastError;
+}
+
 /** Instagram gives only the 20 latest messages of a conversation, so a longer thread's start is unknown. */
 const VISIBLE = 20;
 
@@ -25,17 +45,19 @@ const VISIBLE = 20;
 export async function syncIgConversations(days = 40, deadline = Date.now() + 90_000) {
   const cutoff = Date.now() - days * 86_400_000;
   const seen: { id: string; updated_time: string }[] = [];
-  let page = await graphAsPage<Paged<{ id: string; updated_time: string }>>(`${META.pageId}/conversations`, {
-    platform: "instagram",
-    fields: "id,updated_time",
-    limit: 25,
-  });
+  let page = await conversationsPage(null);
   // Conversations come newest first: stop at the first one older than the window.
   for (;;) {
     const fresh = page.data.filter((c) => Date.parse(c.updated_time) >= cutoff);
     seen.push(...fresh);
     if (fresh.length < page.data.length || !page.paging?.next || seen.length > 3000 || Date.now() > deadline) break;
-    page = await follow(page.paging.next);
+    try {
+      page = await conversationsPage(page.paging.next);
+    } catch (e) {
+      // Keep what was read so far; the next run starts from the newest again and goes further.
+      if (seen.length) break;
+      throw e;
+    }
   }
   if (!seen.length) return { conversations: 0, added: 0 };
 
@@ -46,7 +68,13 @@ export async function syncIgConversations(days = 40, deadline = Date.now() + 90_
   let added = 0;
   for (const c of todo) {
     if (Date.now() > deadline) break;
-    const msgs = await graphAsPage<Paged<{ id: string; created_time: string }>>(`${c.id}/messages`, { fields: "id,created_time", limit: VISIBLE });
+    let msgs: Paged<{ id: string; created_time: string }>;
+    try {
+      msgs = await graphAsPage<Paged<{ id: string; created_time: string }>>(`${c.id}/messages`, { fields: "id,created_time", limit: VISIBLE });
+    } catch (e) {
+      if (e instanceof Error && TOO_BIG.test(e.message)) continue; // try this one again next run
+      throw e;
+    }
     const oldest = msgs.data[msgs.data.length - 1];
     if (!oldest) continue;
     // Did the conversation open with a story reply or a shared post?
