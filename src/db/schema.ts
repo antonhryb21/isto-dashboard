@@ -400,3 +400,14 @@ export const igStories = pgTable("ig_stories", {
   mediaType: text("media_type"),
   publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
 });
+
+/** Instagram direct conversations with when they started, so the SMM report can count new contacts per month. */
+export const igConversations = pgTable("ig_conversations", {
+  id: text("id").primaryKey(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  /** The first message replied to a story or shared a post: the contact came from content. */
+  fromContent: boolean("from_content").notNull().default(false),
+  /** Older messages were not read to the end (very long thread): startedAt is the oldest one seen. */
+  partial: boolean("partial").notNull().default(false),
+  seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+});

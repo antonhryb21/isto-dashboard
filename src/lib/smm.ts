@@ -5,6 +5,7 @@ import { accountSnapshots, adInsightsDaily, igStories, smmMonths, socialPosts } 
 import { META } from "@/lib/config";
 import { localDate } from "@/lib/dates";
 import { graph } from "@/lib/meta/client";
+import { directForMonth } from "@/lib/meta/direct";
 import { MANUAL_FIELDS, nextMonth, prevMonth, type SmmData, type SmmRow } from "@/lib/smm-calc";
 
 /** All months, oldest first, with hand-typed values laid over what was loaded. */
@@ -214,6 +215,9 @@ export async function refreshSmmMonth(month: string) {
     .where(and(gte(igStories.publishedAt, new Date(monthStart(month))), lt(igStories.publishedAt, new Date(monthStart(nextMonth(month))))));
 
   const paid = await paidInstagramImpressions(from, lastDay);
+  const direct = await directForMonth(monthStart(month), monthStart(nextMonth(month)));
+  if (direct) notes.directFromContent = "З контенту — розмови, що почалися з відповіді на сторіс або поширеного допису";
+  else notes.directNew = "Директ ще не читається: потрібен дозвіл instagram_manage_messages і доступ до повідомлень в Instagram";
   const viewsTotal = v.views ?? null;
   const viewsPaid = paid !== null && viewsTotal !== null ? Math.min(paid, viewsTotal) : null;
   if (viewsPaid !== null) notes.viewsPaid = "Реклама — покази в Instagram з рекламних кабінетів; органіка — решта переглядів";
@@ -238,6 +242,8 @@ export async function refreshSmmMonth(month: string) {
     carousels: count("carousel"),
     reels: count("reel", "video"),
     stories: stories?.n ?? 0,
+    directNew: direct?.directNew,
+    directFromContent: direct?.directFromContent,
     leads: ads?.days ? ads.leads : undefined,
     spend: ads?.days ? Math.round(Number(ads.spend) * 100) / 100 : undefined,
   };

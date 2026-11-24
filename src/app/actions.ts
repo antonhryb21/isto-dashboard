@@ -459,11 +459,19 @@ export async function saveSmmAction(_: ActionResult | null, form: FormData): Pro
 export async function refreshSmmAction(): Promise<ActionResult> {
   await requireUser("marketing");
   const { refreshSmm } = await import("@/lib/smm");
+  const { syncIgConversations } = await import("@/lib/meta/direct");
+  // Direct first, so the month picks up new contacts; a missing permission must not stop the rest.
+  let directProblem = "";
+  try {
+    await syncIgConversations(40);
+  } catch (e) {
+    directProblem = ` Директ не прочитано: ${e instanceof Error ? e.message : String(e)}`;
+  }
   try {
     await refreshSmm();
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Не вдалося оновити" };
   }
   revalidatePath("/reports/smm");
-  return { ok: true, message: "Оновлено з Meta" };
+  return { ok: !directProblem, message: `Оновлено з Meta.${directProblem}` };
 }
