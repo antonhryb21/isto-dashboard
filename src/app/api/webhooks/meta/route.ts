@@ -7,7 +7,9 @@ import { recordConversationWith } from "@/lib/meta/direct";
 /** Meta calls GET once to verify the webhook URL. */
 export function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams;
-  if (p.get("hub.mode") === "subscribe" && p.get("hub.verify_token") === process.env.META_WEBHOOK_VERIFY_TOKEN) {
+  // Trimmed on both sides: a space pasted along with the value in Vercel must not break verification.
+  const expected = process.env.META_WEBHOOK_VERIFY_TOKEN?.trim();
+  if (p.get("hub.mode") === "subscribe" && expected && p.get("hub.verify_token")?.trim() === expected) {
     return new NextResponse(p.get("hub.challenge") ?? "", { status: 200 });
   }
   return new NextResponse("forbidden", { status: 403 });
