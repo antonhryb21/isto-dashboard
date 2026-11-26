@@ -94,6 +94,36 @@ export async function syncIgConversations(days = 40, deadline = Date.now() + 90_
   return { conversations: seen.length, added, left: todo.length - added };
 }
 
+/**
+ * One person wrote in direct (webhook): look up just their conversation and record when it started.
+ * A single small request, so it works even when listing the whole inbox times out.
+ */
+export async function recordConversationWith(userId: string) {
+  const r = await graphAsPage<Paged<{ id: string; messages?: Paged<{ id: string; created_time: string }> }>>(`${META.pageId}/conversations`, {
+    platform: "instagram",
+    user_id: userId,
+    fields: `id,messages.limit(${VISIBLE}){id,created_time}`,
+  });
+  const conv = r.data[0];
+  const msgs = conv?.messages?.data ?? [];
+  const oldest = msgs[msgs.length - 1];
+  if (!conv || !oldest) return false;
+  const [known] = await db.select({ id: igConversations.id }).from(igConversations).where(inArray(igConversations.id, [conv.id]));
+  if (known) return false;
+  let fromContent = false;
+  try {
+    const m = await graphAsPage<{ story?: unknown; shares?: unknown }>(oldest.id, { fields: "story,shares" });
+    fromContent = Boolean(m.story || m.shares);
+  } catch {
+    /* not readable: count it as a plain message */
+  }
+  await db
+    .insert(igConversations)
+    .values({ id: conv.id, startedAt: new Date(oldest.created_time), fromContent, partial: msgs.length >= VISIBLE })
+    .onConflictDoNothing();
+  return true;
+}
+
 /** New direct contacts and how many of them came from content, for a month ["2026-11-01", "2026-12-01"). */
 export async function directForMonth(fromIso: string, toIso: string) {
   const [any] = await db.select({ n: sql<number>`count(*)::int` }).from(igConversations);

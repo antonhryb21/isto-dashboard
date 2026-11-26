@@ -458,22 +458,14 @@ export async function saveSmmAction(_: ActionResult | null, form: FormData): Pro
 /** Re-read the running month (and the previous one in its first week) from Meta. */
 export async function refreshSmmAction(): Promise<ActionResult> {
   await requireUser("marketing");
-  const { refreshSmm } = await import("@/lib/smm");
-  const { syncIgConversations } = await import("@/lib/meta/direct");
-  // Direct first, so the month picks up new contacts; a missing permission must not stop the rest.
-  let directProblem = "";
-  let directNote = "";
-  try {
-    const r = await syncIgConversations(40);
-    directNote = r.left ? ` Директ: прочитано ${r.added} нових розмов, ще ${r.left} — натисніть ще раз.` : ` Директ: ${r.conversations} розмов за 40 днів.`;
-  } catch (e) {
-    directProblem = ` Директ не прочитано: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  const { refreshSmm, syncDirect } = await import("@/lib/smm");
+  // Direct first, so the month picks up new contacts; a problem there must not stop the rest.
+  const direct = await syncDirect();
   try {
     await refreshSmm();
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Не вдалося оновити" };
   }
   revalidatePath("/reports/smm");
-  return { ok: !directProblem, message: `Оновлено з Meta.${directProblem || directNote}` };
+  return { ok: direct.ok, message: `Оновлено з Meta. Директ: ${direct.text}` };
 }

@@ -217,7 +217,12 @@ export async function refreshSmmMonth(month: string) {
   const paid = await paidInstagramImpressions(from, lastDay);
   const direct = await directForMonth(monthStart(month), monthStart(nextMonth(month)));
   if (direct) notes.directFromContent = "З контенту — розмови, що почалися з відповіді на сторіс або поширеного допису";
-  else notes.directNew = "Розмови з директу ще не завантажені. Натисніть «Оновити з Meta»: поруч з кнопкою буде видно, скільки прочитано або що завадило";
+  else {
+    const last = (existing?.notes as Record<string, string> | undefined)?.directStatus;
+    notes.directNew = last ? `Розмови з директу ще не завантажені. Остання спроба: ${last}` : "Розмови з директу ще не завантажені";
+  }
+  const lastStatus = (existing?.notes as Record<string, string> | undefined)?.directStatus;
+  if (lastStatus) notes.directStatus = lastStatus;
   const viewsTotal = v.views ?? null;
   const viewsPaid = paid !== null && viewsTotal !== null ? Math.min(paid, viewsTotal) : null;
   if (viewsPaid !== null) notes.viewsPaid = "Реклама — покази в Instagram з рекламних кабінетів; органіка — решта переглядів";
@@ -267,4 +272,33 @@ export async function refreshSmm() {
   const done = [await refreshSmmMonth(month)];
   if (Number(today.slice(8, 10)) <= 7) done.unshift(await refreshSmmMonth(prevMonth(month)));
   return { months: done };
+}
+
+/** Remember how the last attempt to read direct went, so the report can say it (not only the button). */
+export async function recordDirectStatus(text: string) {
+  const month = localDate().slice(0, 7);
+  const stamped = `${new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kyiv", dateStyle: "short", timeStyle: "short" })} — ${text}`;
+  await db
+    .insert(smmMonths)
+    .values({ month, notes: { directStatus: stamped } })
+    .onConflictDoUpdate({
+      target: smmMonths.month,
+      set: { notes: sql`${smmMonths.notes} || ${JSON.stringify({ directStatus: stamped })}::jsonb` },
+    });
+}
+
+/** Read direct and record the outcome; never throws, so the rest of the refresh goes on. */
+export async function syncDirect(): Promise<{ ok: boolean; text: string }> {
+  const { syncIgConversations } = await import("@/lib/meta/direct");
+  let out: { ok: boolean; text: string };
+  try {
+    const r = await syncIgConversations(40);
+    out = r.left
+      ? { ok: true, text: `прочитано ${r.added} нових розмов, ще ${r.left} — наступне оновлення продовжить` }
+      : { ok: true, text: `${r.conversations} розмов за 40 днів${r.conversations ? "" : " (Meta не віддала жодної — перевірте «Дозволити доступ до повідомлень» в Instagram)"}` };
+  } catch (e) {
+    out = { ok: false, text: `помилка Meta: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  await recordDirectStatus(out.text).catch(() => {});
+  return out;
 }

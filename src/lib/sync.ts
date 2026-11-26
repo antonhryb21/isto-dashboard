@@ -9,8 +9,7 @@ import { syncAdStructure, syncInsights } from "@/lib/meta/ads";
 import { syncFacebook, syncInstagram } from "@/lib/meta/social";
 import { discoverSources, importAllSources } from "@/lib/sheets/sync";
 import { syncMetaLeads } from "@/lib/meta/leadgen";
-import { refreshSmm } from "@/lib/smm";
-import { syncIgConversations } from "@/lib/meta/direct";
+import { refreshSmm, syncDirect } from "@/lib/smm";
 import { googleCredentialsSet } from "@/lib/google-credentials";
 
 /** Live Google Sheets sync is optional: on only when a service account is configured. */
@@ -96,7 +95,11 @@ export async function runSync(kind: SyncKind, opts: { months?: number } = {}) {
     await step("instagram", () => syncInstagram(30));
     await step("facebook", () => syncFacebook(30));
     await step("competitors", () => syncCompetitors(2));
-    await step("direct", () => syncIgConversations(40));
+    await step("direct", async () => {
+      const r = await syncDirect();
+      if (!r.ok) throw new Error(r.text);
+      return r;
+    });
     await step("smm", () => refreshSmm());
     if (sheetsEnabled()) await step("sheets", () => importAllSources(started + BUDGET_MS - 15_000));
   }

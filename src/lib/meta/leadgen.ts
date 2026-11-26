@@ -49,7 +49,14 @@ export async function ingestLead(leadgenId: string) {
 /** Subscribe the ISTO Page to leadgen events for our app (one-time; safe to repeat). */
 export async function subscribePageToLeadgen() {
   // Page subscriptions must be made with a Page access token.
-  return graphPost(`${META.pageId}/subscribed_apps`, { subscribed_fields: "leadgen" }, await pageToken());
+  // Messages feed the direct count in the SMM report; if the token cannot subscribe to them, leads still must work.
+  const pt = await pageToken();
+  try {
+    return await graphPost(`${META.pageId}/subscribed_apps`, { subscribed_fields: "leadgen,messages" }, pt);
+  } catch (e) {
+    console.warn("[leadgen] messages subscription refused, subscribing to leads only:", e instanceof Error ? e.message : e);
+    return graphPost(`${META.pageId}/subscribed_apps`, { subscribed_fields: "leadgen" }, pt);
+  }
 }
 
 type FormLead = ApiLead;
