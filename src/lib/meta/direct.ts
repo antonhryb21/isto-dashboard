@@ -19,12 +19,14 @@ const TOO_BIG = /timeout|reduce the amount|temporarily unavailable|unknown error
 
 async function conversationsPage(next: string | null) {
   type C = Paged<{ id: string; updated_time: string }>;
+  // Smaller pages first; the last try also limits the listing to the main inbox (not requests/spam).
+  const tries: Record<string, string | number>[] = [{ limit: 25 }, { limit: 10 }, { limit: 5 }, { limit: 5, folder: "inbox" }];
   let lastError: unknown;
-  for (const limit of [25, 10, 5]) {
+  for (const t of tries) {
     try {
-      if (!next) return await graphAsPage<C>(`${META.pageId}/conversations`, { platform: "instagram", fields: "id,updated_time", limit });
+      if (!next) return await graphAsPage<C>(`${META.pageId}/conversations`, { platform: "instagram", fields: "id,updated_time", ...t });
       const url = new URL(next);
-      url.searchParams.set("limit", String(limit));
+      for (const [k, v] of Object.entries(t)) url.searchParams.set(k, String(v));
       return await follow<C["data"][number]>(url.toString());
     } catch (e) {
       lastError = e;
@@ -33,6 +35,9 @@ async function conversationsPage(next: string | null) {
   }
   throw lastError;
 }
+
+/** Meta could not list the inbox at all (it times out on large inboxes); the webhook still records new chats. */
+export class InboxTooLargeError extends Error {}
 
 /** Instagram gives only the 20 latest messages of a conversation, so a longer thread's start is unknown. */
 const VISIBLE = 20;
@@ -45,7 +50,13 @@ const VISIBLE = 20;
 export async function syncIgConversations(days = 40, deadline = Date.now() + 90_000) {
   const cutoff = Date.now() - days * 86_400_000;
   const seen: { id: string; updated_time: string }[] = [];
-  let page = await conversationsPage(null);
+  let page: Paged<{ id: string; updated_time: string }>;
+  try {
+    page = await conversationsPage(null);
+  } catch (e) {
+    if (e instanceof Error && TOO_BIG.test(e.message)) throw new InboxTooLargeError(e.message);
+    throw e;
+  }
   // Conversations come newest first: stop at the first one older than the window.
   for (;;) {
     const fresh = page.data.filter((c) => Date.parse(c.updated_time) >= cutoff);
@@ -126,8 +137,8 @@ export async function recordConversationWith(userId: string) {
 
 /** New direct contacts and how many of them came from content, for a month ["2026-11-01", "2026-12-01"). */
 export async function directForMonth(fromIso: string, toIso: string) {
-  const [any] = await db.select({ n: sql<number>`count(*)::int` }).from(igConversations);
-  if (!any?.n) return null; // never synced (no permission yet): leave the month empty rather than show 0
+  const [any] = await db.select({ n: sql<number>`count(*)::int`, since: sql<string | null>`min(${igConversations.seenAt})::text` }).from(igConversations);
+  if (!any?.n) return null; // nothing recorded yet: leave the month empty rather than show 0
   const [r] = await db
     .select({
       total: sql<number>`count(*)::int`,
@@ -138,5 +149,8 @@ export async function directForMonth(fromIso: string, toIso: string) {
     .where(
       sql`${igConversations.startedAt} >= ${fromIso}::timestamptz and ${igConversations.startedAt} < ${toIso}::timestamptz and not ${igConversations.partial}`,
     );
-  return { directNew: r?.total ?? 0, directFromContent: r?.content ?? 0 };
+  // Recording began mid-month: the number covers only the days since then.
+  const since = any.since ? new Date(any.since) : null;
+  const partialSince = since && since > new Date(fromIso) && since < new Date(toIso) ? since.toISOString().slice(0, 10) : null;
+  return { directNew: r?.total ?? 0, directFromContent: r?.content ?? 0, partialSince };
 }

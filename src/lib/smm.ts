@@ -216,7 +216,11 @@ export async function refreshSmmMonth(month: string) {
 
   const paid = await paidInstagramImpressions(from, lastDay);
   const direct = await directForMonth(monthStart(month), monthStart(nextMonth(month)));
-  if (direct) notes.directFromContent = "З контенту — розмови, що почалися з відповіді на сторіс або поширеного допису";
+  if (direct) {
+    notes.directFromContent = "З контенту — розмови, що почалися з відповіді на сторіс або поширеного допису";
+    if (direct.partialSince)
+      notes.directNew = `Рахується з ${direct.partialSince.split("-").reverse().join(".")}, коли дашборд почав отримувати директ. За попередні дні місяця впишіть число вручну в «Ручні дані»`;
+  }
   else {
     const last = (existing?.notes as Record<string, string> | undefined)?.directStatus;
     notes.directNew = last ? `Розмови з директу ще не завантажені. Остання спроба: ${last}` : "Розмови з директу ще не завантажені";
@@ -289,7 +293,7 @@ export async function recordDirectStatus(text: string) {
 
 /** Read direct and record the outcome; never throws, so the rest of the refresh goes on. */
 export async function syncDirect(): Promise<{ ok: boolean; text: string }> {
-  const { syncIgConversations } = await import("@/lib/meta/direct");
+  const { syncIgConversations, InboxTooLargeError } = await import("@/lib/meta/direct");
   let out: { ok: boolean; text: string };
   try {
     const r = await syncIgConversations(40);
@@ -297,7 +301,13 @@ export async function syncDirect(): Promise<{ ok: boolean; text: string }> {
       ? { ok: true, text: `прочитано ${r.added} нових розмов, ще ${r.left} — наступне оновлення продовжить` }
       : { ok: true, text: `${r.conversations} розмов за 40 днів${r.conversations ? "" : " (Meta не віддала жодної — перевірте «Дозволити доступ до повідомлень» в Instagram)"}` };
   } catch (e) {
-    out = { ok: false, text: `помилка Meta: ${e instanceof Error ? e.message : String(e)}` };
+    out =
+      e instanceof InboxTooLargeError
+        ? {
+            ok: true,
+            text: "Meta не встигає віддати список усіх розмов (тайм-аут). Нові розмови записуються через вебхук, щойно хтось пише в директ",
+          }
+        : { ok: false, text: `помилка Meta: ${e instanceof Error ? e.message : String(e)}` };
   }
   await recordDirectStatus(out.text).catch(() => {});
   return out;
