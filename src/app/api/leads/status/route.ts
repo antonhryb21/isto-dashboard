@@ -15,6 +15,9 @@ import { cardTextFor, registerTelegramCard, syncTelegramCards } from "@/lib/tele
  * { "lead_id": "1977622026500180", "status": "Contacted", "changed_by": "@yuliia", "owner": "Max", "comment": "…",
  *   "next_contact": "2026-11-20", "lost_reason": "Задорого" }
  *
+ * Every field but lead_id is optional: { "lead_id", "comment", "changed_by" } alone is the bot's Comment button.
+ * A comment goes into the lead's history and onto all of its Telegram cards.
+ *
  * lead_id is the Meta leadgen id (with or without the "l:" prefix), or "w:<CRM id>" for a website
  * form lead. status accepts a label
  * ("No answer"), a code ("no_answer") or a known alias. owner and comment are optional.
@@ -22,7 +25,7 @@ import { cardTextFor, registerTelegramCard, syncTelegramCards } from "@/lib/tele
  * Optional, the card the button was pressed on: "chat_id", "message_id", "card_text", "reply_markup".
  * The bot edits that card itself; the dashboard remembers it and rewrites the lead's other cards
  * (group / personal chat) with the new status. The answer then has "card_text": the full text for the
- * pressed card with every status block, so the bot can put exactly that on it.
+ * pressed card with every status and comment block, so the bot can put exactly that on it.
  */
 export async function POST(request: NextRequest) {
   const token = process.env.LEADS_API_TOKEN ?? "";
@@ -94,14 +97,19 @@ export async function POST(request: NextRequest) {
     await registerTelegramCard({ metaLeadId: cardKey, ...pressed, text: body.card_text, replyMarkup: body.reply_markup });
   }
 
-  if (status && status !== lead.status) {
-    const metaId = lead.metaLeadId;
-    const id = lead.id;
-    after(() => sendLeadStage(metaId, status));
-    after(() => syncTelegramCards(id, pressed));
-  }
   const comment = String(body.comment ?? "").trim();
   if (comment) await addComment(lead.id, author, comment.slice(0, 4000));
+
+  const statusChanged = !!status && status !== lead.status;
+  if (statusChanged) {
+    const metaId = lead.metaLeadId;
+    after(() => sendLeadStage(metaId, status));
+  }
+  // The lead's other cards (group / personal chat) get the new status or comment block.
+  if (statusChanged || comment) {
+    const id = lead.id;
+    after(() => syncTelegramCards(id, pressed));
+  }
 
   const cardText = pressed && cardKey ? await cardTextFor(lead.id, cardKey, pressed.chatId, pressed.messageId) : null;
   return NextResponse.json({ ok: true, lead: lead.id, status: status ?? lead.status, ...(cardText ? { card_text: cardText } : {}) });

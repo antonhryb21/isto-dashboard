@@ -145,6 +145,7 @@ export async function addCommentAction(_: ActionResult | null, form: FormData): 
   const text = String(form.get("text") ?? "").trim();
   if (!text) return { ok: false, message: "Коментар порожній" };
   await addComment(id, user.email, text.slice(0, 4000));
+  after(() => syncTelegramCards(id));
   revalidatePath(`/crm/${id}`);
   return { ok: true };
 }

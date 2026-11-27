@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorLabel, buildCardText, cardTime, stripStatusBlocks } from "@/lib/telegram-cards-format";
+import { authorLabel, buildCardText, cardTime, stripStatusBlocks, withCommentButton } from "@/lib/telegram-cards-format";
 
 const base = "🔥 Новый лид из Meta - DUBAI 🇦🇪\n\n🕒 Создано: 06.11.2026 19:43\n👤 Имя: Rubeena\n📋 Форма: New ShortForm| Dubai";
 
@@ -34,5 +34,44 @@ describe("telegram cards", () => {
         `\n\n📋 Статус: Lead (Qualified)\n👤 Обновил: Max &lt;m&gt;\n🕒 Обновлено: 11.11.2026 18:20`,
     );
     expect(buildCardText(base, [])).toBe(base);
+  });
+
+  it("adds comment blocks in order and strips them again", () => {
+    const text = buildCardText(base, [
+      { label: "Contacted", author: "@a", at: new Date("2026-11-09T14:16:00Z") },
+      { kind: "comment", text: "call <back> Monday", author: "@a", at: new Date("2026-11-09T14:20:00Z") },
+    ]);
+    expect(text).toBe(
+      `${base}\n\n📋 Статус: Contacted\n👤 Обновил: @a\n🕒 Обновлено: 09.11.2026 16:16` +
+        `\n\n💬 Комментарий: call &lt;back&gt; Monday\n👤 Автор: @a\n🕒 09.11.2026 16:20`,
+    );
+    expect(stripStatusBlocks(text)).toBe(base);
+    expect(stripStatusBlocks(`${base}\n\n💬 Комментарий: x\n👤 Автор: @a\n🕒 09.11.2026 16:20`)).toBe(base);
+  });
+
+  it("keeps the card under the Telegram limit by dropping the oldest blocks", () => {
+    const at = new Date("2026-11-09T14:20:00Z");
+    const entries = Array.from({ length: 12 }, (_, i) => ({ kind: "comment" as const, text: `${i} ${"x".repeat(790)}`, author: "@a", at }));
+    const text = buildCardText(base, entries);
+    expect(text.length).toBeLessThanOrEqual(4096);
+    expect(text.startsWith(`${base}\n\n…\n\n`)).toBe(true);
+    expect(text).toContain("💬 Комментарий: 11 ");
+    expect(text).not.toContain("💬 Комментарий: 0 ");
+  });
+
+  it("turns the old Follow-up button into Comment", () => {
+    const markup = {
+      inline_keyboard: [
+        [{ text: "No answer", callback_data: "No answer|l:1|N" }, { text: "Follow-up", callback_data: "Follow-up|l:1|N" }],
+        [{ text: "Follow-up", callback_data: "Follow-up|w:abc|web" }],
+      ],
+    };
+    expect(withCommentButton(markup)).toEqual({
+      inline_keyboard: [
+        [{ text: "No answer", callback_data: "No answer|l:1|N" }, { text: "✍️ Comment", callback_data: "Comment|l:1|N" }],
+        [{ text: "✍️ Comment", callback_data: "Comment|w:abc|web" }],
+      ],
+    });
+    expect(withCommentButton(null)).toBeNull();
   });
 });

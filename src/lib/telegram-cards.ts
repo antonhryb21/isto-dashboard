@@ -3,7 +3,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { leadEvents, leadTelegramCards, leads, users } from "@/db/schema";
 import { statusLabel } from "@/lib/statuses";
-import { authorLabel, buildCardText, stripStatusBlocks } from "@/lib/telegram-cards-format";
+import { authorLabel, buildCardText, stripStatusBlocks, withCommentButton, type CardEntry } from "@/lib/telegram-cards-format";
 
 /** Token of the bot that posts the lead cards (the n8n bot). Only that bot can edit its messages. */
 function botToken() {
@@ -39,7 +39,7 @@ export async function registerTelegramCard(input: {
 export type CardSyncResult = { updated: number; errors?: string[]; skipped?: string };
 
 /**
- * Rebuild every Telegram card of a lead from its stored text plus the lead's status history,
+ * Rebuild every Telegram card of a lead from its stored text plus the lead's status changes and comments,
  * in the bot's format, keeping the buttons. `skip` is the card the bot has just edited itself.
  * Never throws: a Telegram problem must not break a status change.
  */
@@ -54,7 +54,7 @@ export async function syncTelegramCards(leadId: string, skip?: { chatId: string;
     const targets = cards.filter((c) => !(skip && skip.chatId === c.chatId && skip.messageId === c.messageId));
     if (!targets.length) return { updated: 0 };
 
-    const changes = await statusChanges(leadId);
+    const changes = await cardEntries(leadId);
 
     let updated = 0;
     const errors: string[] = [];
@@ -68,7 +68,7 @@ export async function syncTelegramCards(leadId: string, skip?: { chatId: string;
           text: buildCardText(c.baseText, changes),
           parse_mode: "HTML",
           disable_web_page_preview: true,
-          ...(c.replyMarkup ? { reply_markup: c.replyMarkup } : {}),
+          ...(c.replyMarkup ? { reply_markup: withCommentButton(c.replyMarkup) } : {}),
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
@@ -83,12 +83,12 @@ export async function syncTelegramCards(leadId: string, skip?: { chatId: string;
   }
 }
 
-/** The lead's status changes, oldest first, with authors as the card shows them. */
-async function statusChanges(leadId: string) {
+/** The lead's status changes and comments, oldest first, with authors as the card shows them. */
+async function cardEntries(leadId: string): Promise<CardEntry[]> {
   const events = await db
     .select()
     .from(leadEvents)
-    .where(and(eq(leadEvents.leadId, leadId), eq(leadEvents.type, "status")))
+    .where(and(eq(leadEvents.leadId, leadId), inArray(leadEvents.type, ["status", "comment"])))
     .orderBy(asc(leadEvents.createdAt));
 
   const emails = [...new Set(events.map((e) => e.author).filter((a): a is string => !!a && a.includes("@") && !a.startsWith("telegram:")))];
@@ -98,15 +98,15 @@ async function statusChanges(leadId: string) {
       if (u.name) names.set(u.email, u.name);
     }
   }
-  return events.map((e) => ({
-    label: e.toValue ? statusLabel(e.toValue) : "",
-    author: authorLabel(e.author, names),
-    at: e.createdAt,
-  }));
+  return events.map((e): CardEntry =>
+    e.type === "comment"
+      ? { kind: "comment", text: e.text ?? "", author: authorLabel(e.author, names), at: e.createdAt }
+      : { kind: "status", label: e.toValue ? statusLabel(e.toValue) : "", author: authorLabel(e.author, names), at: e.createdAt },
+  );
 }
 
 /**
- * Full text for one card of a lead (its stored text plus the status blocks), for the bot to put
+ * Full text for one card of a lead (its stored text plus the status and comment blocks), for the bot to put
  * on the card the button was pressed on. Null when that card is not known.
  */
 export async function cardTextFor(leadId: string, metaLeadId: string, chatId: string, messageId: number) {
@@ -116,5 +116,5 @@ export async function cardTextFor(leadId: string, metaLeadId: string, chatId: st
     .where(and(eq(leadTelegramCards.metaLeadId, metaLeadId), eq(leadTelegramCards.chatId, chatId), eq(leadTelegramCards.messageId, messageId)))
     .limit(1);
   if (!card) return null;
-  return buildCardText(card.baseText, await statusChanges(leadId));
+  return buildCardText(card.baseText, await cardEntries(leadId));
 }
